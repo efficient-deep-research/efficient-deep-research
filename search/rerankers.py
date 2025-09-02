@@ -91,60 +91,50 @@ class ContextualAIReranker(Reranker):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, dtype=self.dtype).to(self.device).eval()
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
+
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        self.tokenizer.padding_side = "left"
-
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, dtype=self.dtype).to(self.device)
-        self.model.eval()
-
-    def format_prompts(self, query: str, documents: list[str], instruction: str | None = None) -> list[str]:
-        if instruction is not None:
-            query_and_instruction = f"{query} {instruction}"
-        else:
-            query_and_instruction = query
-
-        prompts = [
-            (
-                "Check whether a given document contains information helpful to answer the query.\n"
-                f"<Document> {document}\n"
-                f"<Query> {query_and_instruction} ??"
-            )
-            for document in documents
-        ]
+    def _format_prompts(self, query: str, instruction: str, documents: list[str]) -> list[str]:
+        if instruction:
+            instruction = f" {instruction}"
+        prompts = []
+        for doc in documents:
+            prompt = f"Check whether a given document contains information helpful to answer the query.\n<Document> {doc}\n<Query> {query}{instruction} ??"
+            prompts.append(prompt)
         return prompts
 
     def __call__(
         self,
         query: str,
         documents: list[Document],
-        instruction: str | None = None,
+        instruction: str = "",
         max_length: int | None = None,
         batch_size: int = 1,
     ) -> tuple[list[Document], list[float]]:
-        prompts = self.format_prompts(query, documents, instruction=instruction)
+        prompts = self._format_prompts(query, instruction, documents)
 
-        scores_list = []
+        scores: list[float] = []
         for i in range(0, len(prompts), batch_size):
             batch_prompts = prompts[i : i + batch_size]
-            batch_encoding = self.tokenizer(
-                batch_prompts, padding=True, truncation=True, max_length=max_length, return_tensors="pt"
+            batch_enc = self.tokenizer(
+                batch_prompts, return_tensors="pt", padding=True, truncation=True, max_length=max_length
             )
+            batch_input_ids = batch_enc["input_ids"].to(self.device)
+            batch_attention_mask = batch_enc["attention_mask"].to(self.device)
+
             with torch.no_grad():
-                batch_output = self.model(**batch_encoding.to(self.device))
+                batch_out = self.model(input_ids=batch_input_ids, attention_mask=batch_attention_mask)
 
-            batch_scores = batch_output.logits[:, -1, 0]
-            scores_list.append(batch_scores.cpu())
+            batch_next_logits = batch_out.logits[:, -1, :]
+            batch_scores_bf16 = batch_next_logits[:, 0].to(torch.bfloat16)
+            batch_scores = batch_scores_bf16.float().tolist()
 
-            del batch_encoding
-            del batch_output
+            scores.extend(batch_scores)
 
-        scores = torch.cat(scores_list)
-        sorting_idxs = scores.argsort(descending=True).tolist()
+        sorted_idxs, sorted_scores = zip(*sorted(enumerate(scores), key=lambda x: x[1], reverse=True))
+        sorted_documents = [documents[i] for i in sorted_idxs]
 
-        sorted_documents = [documents[i] for i in sorting_idxs]
-        sorted_scores = scores[sorting_idxs]
-
-        return sorted_documents, sorted_scores.tolist()
+        return sorted_documents, sorted_scores
