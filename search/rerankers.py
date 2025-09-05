@@ -1,5 +1,5 @@
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BatchEncoding
+from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification, AutoTokenizer, BatchEncoding
 
 from search.data import Document
 
@@ -7,6 +7,31 @@ from search.data import Document
 class Reranker:
     def __call__(self, query: str, documents: list[Document]) -> list[Document]:
         raise NotImplementedError
+
+
+class JinaReranker(Reranker):
+    def __init__(self, model_name: str = "jinaai/jina-reranker-v2-base-multilingual"):
+        super().__init__()
+
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        self.model = (
+            AutoModelForSequenceClassification.from_pretrained(model_name, dtype="auto", trust_remote_code=True)
+            .to(self.device)
+            .eval()
+        )
+
+    def __call__(
+        self, query: str, documents: list[Document], max_length: int = 1024, batch_size: int = 1
+    ) -> tuple[list[Document], list[float]]:
+        text_pairs = [(query, document.text) for document in documents]
+
+        scores: list[float] = self.model.compute_score(text_pairs, batch_size=batch_size, max_length=max_length)
+
+        sorted_idxs, sorted_scores = zip(*sorted(enumerate(scores), key=lambda x: x[1], reverse=True))
+        sorted_documents = [documents[i] for i in sorted_idxs]
+
+        return sorted_documents, sorted_scores
 
 
 class Qwen3Reranker(Reranker):
