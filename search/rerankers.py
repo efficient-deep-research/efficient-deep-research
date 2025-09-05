@@ -39,9 +39,8 @@ class Qwen3Reranker(Reranker):
         super().__init__()
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, dtype=self.dtype).to(self.device).eval()
+        self.model = AutoModelForCausalLM.from_pretrained(model_name).to(self.device).eval()
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
 
         self.token_true_id = self.tokenizer.convert_tokens_to_ids("yes")
@@ -93,7 +92,7 @@ class Qwen3Reranker(Reranker):
         max_length: int = 8192,
         batch_size: int = 1,
     ) -> tuple[list[Document], list[float]]:
-        pairs = [self._format_instruction(instruction, query, doc) for doc in documents]
+        pairs = [self._format_instruction(instruction, query, document.text) for document in documents]
 
         scores: list[float] = []
         for i in range(0, len(pairs), batch_size):
@@ -117,10 +116,10 @@ class ContextualAIReranker(Reranker):
         self.dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 
         self.model = AutoModelForCausalLM.from_pretrained(model_name, dtype=self.dtype).to(self.device).eval()
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
-
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.padding_side = "left"
 
     def _format_prompts(self, query: str, instruction: str, documents: list[str]) -> list[str]:
         if instruction:
@@ -139,7 +138,7 @@ class ContextualAIReranker(Reranker):
         max_length: int | None = None,
         batch_size: int = 1,
     ) -> tuple[list[Document], list[float]]:
-        prompts = self._format_prompts(query, instruction, documents)
+        prompts = self._format_prompts(query, instruction, [document.text for document in documents])
 
         scores: list[float] = []
         for i in range(0, len(prompts), batch_size):
