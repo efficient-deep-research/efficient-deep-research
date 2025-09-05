@@ -1,5 +1,5 @@
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BatchEncoding
+from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification, AutoTokenizer, BatchEncoding
 
 from search.data import Document
 
@@ -9,14 +9,38 @@ class Reranker:
         raise NotImplementedError
 
 
+class JinaReranker(Reranker):
+    def __init__(self, model_name: str = "jinaai/jina-reranker-v2-base-multilingual"):
+        super().__init__()
+
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        self.model = (
+            AutoModelForSequenceClassification.from_pretrained(model_name, dtype="auto", trust_remote_code=True)
+            .to(self.device)
+            .eval()
+        )
+
+    def __call__(
+        self, query: str, documents: list[Document], max_length: int = 1024, batch_size: int = 1
+    ) -> tuple[list[Document], list[float]]:
+        text_pairs = [(query, document.text) for document in documents]
+
+        scores: list[float] = self.model.compute_score(text_pairs, batch_size=batch_size, max_length=max_length)
+
+        sorted_idxs, sorted_scores = zip(*sorted(enumerate(scores), key=lambda x: x[1], reverse=True))
+        sorted_documents = [documents[i] for i in sorted_idxs]
+
+        return sorted_documents, sorted_scores
+
+
 class Qwen3Reranker(Reranker):
     def __init__(self, model_name: str = "Qwen/Qwen3-Reranker-0.6B"):
         super().__init__()
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, dtype=self.dtype).to(self.device).eval()
+        self.model = AutoModelForCausalLM.from_pretrained(model_name).to(self.device).eval()
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
 
         self.token_true_id = self.tokenizer.convert_tokens_to_ids("yes")
@@ -68,7 +92,7 @@ class Qwen3Reranker(Reranker):
         max_length: int = 8192,
         batch_size: int = 1,
     ) -> tuple[list[Document], list[float]]:
-        pairs = [self._format_instruction(instruction, query, doc) for doc in documents]
+        pairs = [self._format_instruction(instruction, query, document.text) for document in documents]
 
         scores: list[float] = []
         for i in range(0, len(pairs), batch_size):
@@ -92,10 +116,10 @@ class ContextualAIReranker(Reranker):
         self.dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 
         self.model = AutoModelForCausalLM.from_pretrained(model_name, dtype=self.dtype).to(self.device).eval()
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
-
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.padding_side = "left"
 
     def _format_prompts(self, query: str, instruction: str, documents: list[str]) -> list[str]:
         if instruction:
@@ -114,7 +138,7 @@ class ContextualAIReranker(Reranker):
         max_length: int | None = None,
         batch_size: int = 1,
     ) -> tuple[list[Document], list[float]]:
-        prompts = self._format_prompts(query, instruction, documents)
+        prompts = self._format_prompts(query, instruction, [document.text for document in documents])
 
         scores: list[float] = []
         for i in range(0, len(prompts), batch_size):
