@@ -15,7 +15,7 @@ class Retriever:
         raise NotImplementedError
 
 
-class FinewWebRetriever(Retriever):
+class FineWebRetriever(Retriever):
     endpoint_url = "https://clueweb22.us/fineweb/search"
 
     def __call__(self, query: str, k: int | None = None) -> list[Document]:

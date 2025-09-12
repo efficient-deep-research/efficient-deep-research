@@ -8,7 +8,7 @@ from collections import Counter
 import string
 import os, time
 from collections import defaultdict
-from lcb_runner.evaluation import codegen_metrics
+# from lcb_runner.evaluation import codegen_metrics
 from utils.math_equivalence import is_equiv
 
 

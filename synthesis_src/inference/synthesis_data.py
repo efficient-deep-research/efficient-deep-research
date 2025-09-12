@@ -1,7 +1,9 @@
 import os
+import sys
 import json
 import time
 import re
+import pathlib
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -16,7 +18,6 @@ from vllm import LLM, SamplingParams
 
 from google_search import (
     google_web_search, 
-    extract_relevant_info, 
     fetch_page_content, 
     extract_snippet_with_context
 )
@@ -37,6 +38,13 @@ from openai import OpenAI
 
 from stage_wise_analysis import stage_wise_analysis
 
+lib_path = pathlib.Path(__file__).parent.parent.parent.resolve()
+sys.path.append(str(lib_path))
+from search.data import Document
+from search.retrievers import ClueWeb22Retriever, FineWebRetriever
+from search.rerankers import JinaReranker, Qwen3Reranker
+
+
 # Define special tokens
 BEGIN_SEARCH_QUERY = "<|begin_search_query|>"
 END_SEARCH_QUERY = "<|end_search_query|>"
@@ -44,9 +52,9 @@ BEGIN_SEARCH_RESULT = "<|begin_search_result|>"
 END_SEARCH_RESULT = "<|end_search_result|>"
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run SimpleDeepsearcer for various datasets.")
-    
+
     parser.add_argument(
         '--data_path',
         type=str,
@@ -126,22 +134,7 @@ def parse_args():
         default=20480,
         help="Maximum number of tokens to generate."
     )
-
-    # Bing API Configuration
-    parser.add_argument(
-        '--google_subscription_key',
-        type=str,
-        required=True,
-        help="Google Search API subscription key."
-    )
-
-    parser.add_argument(
-        '--google_endpoint',
-        type=str,
-        default="https://google.serper.dev/search",
-        help="Google Search API endpoint."
-    )
-
+    
     parser.add_argument(
         '--cache_dir_base',
         type=str,
@@ -162,22 +155,6 @@ def parse_args():
         help="is_exclude_urls"
     )
 
-
-    # parser.add_argument(
-    #     '--summarization_model_path',
-    #     type=str,
-    #     required=True,
-    #     help="Path to the summary model."
-    # )
-
-
-    # parser.add_argument(
-    #     '--summarization_model_url',
-    #     type=str,
-    #     required=True,
-    #     help="Base url of the summarization model."
-    # )
-
     parser.add_argument(
         '--rollout_num',
         type=int,
@@ -188,108 +165,13 @@ def parse_args():
     return parser.parse_args()
 
 
-
-# def webpage_analysis_single(summ_model_url, summ_model_path, prompt) -> str:
-#     client_summ_model = OpenAI(
-#         base_url=summ_model_url,
-#         api_key="EMPTY"
-#     )
-#     for i in range(10): # max retry 10 times
-#         try:
-#             completion = client_summ_model.chat.completions.create(
-#                 model=summ_model_path,
-#                 max_tokens=8192,
-#                 temperature=0.6,
-#                 top_p=0.95,
-#                 messages=[prompt],
-#             )
-#             return completion.choices[0].message.content
-#         except Exception as e:
-#             print(e)
-#             time.sleep(1)
-#             continue
-#     return "None"
-
-def main():
-    args = parse_args()
-    # Extract arguments
-    data_path = args.data_path
-    subset_num = args.subset_num
-    MAX_SEARCH_LIMIT = args.max_search_limit
-    MAX_TURN = args.max_turn
-    top_k = args.top_k
-    max_doc_len = args.max_doc_len
-    model_path = args.model_path
-    # summ_model_path = args.summarization_model_path
-    # summ_model_url = args.summarization_model_url
-    temperature = args.temperature
-    top_p = args.top_p
-    top_k_sampling = args.top_k_sampling
-    max_tokens = args.max_tokens
-    google_subscription_key = args.google_subscription_key
-    google_endpoint = args.google_endpoint
-    cache_dir_base = args.cache_dir_base
-    output_dir_base = args.output_dir_base
-    is_exclude_urls = args.is_exclude_urls
-    rollout_num = args.rollout_num
-
-    print(f"CUDA_VISIBLE_DEVICES is set to: {os.environ['CUDA_VISIBLE_DEVICES']}")
-   
-    dataset_name = data_path.split('/')[-1].split('.')[0]
-    
-    print('-----------------------')
-    print(f'Using {dataset_name} set.')
-    print('-----------------------')
-
-    # ---------------------- Caching Mechanism ----------------------
-    # Define cache directories and file paths
-    model_name = model_path.split('/')[-1].replace('-instruct', '')
-    cache_dir = cache_dir_base
-    search_cache_path = os.path.join(cache_dir, 'search_cache.json')
-    url_cache_path = os.path.join(cache_dir, 'url_cache.json')
-
-    # Ensure cache directory exists
-    os.makedirs(cache_dir, exist_ok=True)
-
-    # Load existing caches or initialize empty dictionaries
-    if os.path.exists(search_cache_path):
-        try: 
-            with open(search_cache_path, 'r', encoding='utf-8') as f:
-                search_cache = json.load(f)
-        except Exception as e:
-            print(f"load search_cache.json error: {e}")
-            search_cache = {}
-
-    else:
-        search_cache = {}
-
-    if os.path.exists(url_cache_path):
-        try:
-            with open(url_cache_path, 'r', encoding='utf-8') as f:
-                url_cache = json.load(f)
-        except Exception as e:
-            print(f"load url_cache.json error: {e}")
-            url_cache = {}
-
-    else:
-        url_cache = {}
-
-    # Function to save caches
-    def save_caches():
-        with open(search_cache_path, 'w', encoding='utf-8') as f:
-            json.dump(search_cache, f, ensure_ascii=False, indent=2)
-        with open(url_cache_path, 'w', encoding='utf-8') as f:
-            json.dump(url_cache, f, ensure_ascii=False, indent=2)
-
-    # ---------------------- Reasoning Model Loading ----------------------
+def load_reasoning_model(model_path: str) -> Tuple[LLM, AutoTokenizer]:
     print(f"Loading tokenizer from {model_path}...")
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = 'left'
     print("Tokenizer loaded successfully.")
-
-
 
     print(f"Loading model from {model_path}...")
     print(f"device_count: {torch.cuda.device_count()}")
@@ -302,221 +184,298 @@ def main():
 
     )
     print("Model loaded successfully.")
+    return llm, tokenizer
 
 
-    # ---------------------- Rollout ----------------------
-    for rollout_id in tqdm(range(rollout_num), desc="Rollouts"):
-        print(f"\n===================Rollout {rollout_id + 1} of {rollout_num}===================")
-        # ---------------------- Data Loading ----------------------
-        # Define output directory based on the dataset
-        output_dir = os.path.join(output_dir_base, dataset_name,f"rollout_{rollout_id}")
-        os.makedirs(output_dir, exist_ok=True)
-        
-        print(f"Loading data from {data_path}...")
-        with open(data_path, 'r', encoding='utf-8') as json_file:
-            filtered_data = json.load(json_file)
-        print(f"Data loaded successfully. Total examples: {len(filtered_data)}")
-
-        # ---------------------- Batch Generation Function ----------------------
-        def generate_webpage_to_reasonchain_batch(
-            original_questions: List[str],
-            prev_reasonings: List[str],
-            search_queries: List[str],
-            documents: List[str],
-            dataset_name: str,
-            # summ_model_url: OpenAI,
-            # summ_model_path: str,
-            batch_output_records: List[Dict],  # New parameter to collect outputs
-            coherent: bool = False,
-        ) -> List[str]:
-
-            user_prompts = [
-                get_webpage_to_reasonchain_instruction(r, sq, doc)
-                for r, sq, doc in zip(prev_reasonings, search_queries, documents)
-            ]
+def make_output_dir(output_dir_base: str, dataset_name: str, rollout_id: int) -> str:
+    # Define output directory based on the dataset
+    output_dir = os.path.join(output_dir_base, dataset_name, f"rollout_{rollout_id}")
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir
 
 
-            prompts = [{"role": "user", "content": up} for up in user_prompts]
-            print("webpage ana prompts[0]")
-            print(prompts[0])
+def load_data(data_path: str) -> List[Dict]:
+    print(f"Loading data from {data_path}...")
+    with open(data_path, 'r', encoding='utf-8') as json_file:
+        filtered_data = json.load(json_file)
+    print(f"Data loaded successfully. Total examples: {len(filtered_data)}")
+    return filtered_data
 
-            # webpage_analysis_single_to_map = partial(webpage_analysis_single, summ_model_url, summ_model_path)
-            # with multiprocessing.Pool(processes=50) as pool:
-            #     raw_outputs = list(tqdm(pool.imap(webpage_analysis_single_to_map, prompts), total=len(prompts), desc="generate webpage analyses"))
-            summ_sampling_params = SamplingParams(
-                max_tokens=8192,
-                temperature=0.6,
-                top_p=0.95,
-                stop=None
-            )
-            raw_outputs = llm.chat(
-                messages = [[prompt] for prompt in prompts],
-                sampling_params = summ_sampling_params,
-                use_tqdm=True
-            )
 
-            # Count the number of summarization errors
-            # sum_error = 0
-            # for output in raw_outputs:
-            #     if output is None or output == "None" or output == "":
-            #         sum_error += 1
-            # print(f"summarization_error: {sum_error}, ratios: {sum_error / len(raw_outputs)}")
-        
-            extracted_infos = [extract_answer(raw.outputs[0].text, mode='infogen') for raw in raw_outputs]
-            for i, (p, r, e) in enumerate(zip(prompts, raw_outputs, extracted_infos)):
-                batch_output_records.append({
-                    'prompt': p,
-                    'raw_output': r.outputs[0].text,
-                    'extracted_info': e
-                })
+def extract_relevant_info(search_results):
+    useful_info = []
+    for doc in search_results:
+        info = {
+            "context": doc.text,
+            "url": doc.url,
+        }
+        useful_info.append(info)
 
-            return extracted_infos
+    return useful_info
 
-        # ---------------------- Preparation of Input Prompts ----------------------
-        input_list = []
-        for item in filtered_data:
-            question = item['Question']
+def generate_webpage_to_reasonchain_batch(
+        original_questions: List[str],
+        prev_reasonings: List[str],
+        search_queries: List[str],
+        documents: List[str],
+        dataset_name: str,
+        batch_output_records: List[Dict],  # New parameter to collect outputs
+        llm: LLM,
+        coherent: bool = False,
+) -> List[str]:
 
-            if dataset_name in ['aime']:
-                instruction = get_multiqa_instruction(MAX_SEARCH_LIMIT)
-                user_prompt = get_task_instruction_math(question)
+    user_prompts = [
+        get_webpage_to_reasonchain_instruction(r, sq, doc)
+        for r, sq, doc in zip(prev_reasonings, search_queries, documents)
+    ]
 
-            else:
-                instruction = get_multiqa_instruction(MAX_SEARCH_LIMIT)
-                user_prompt = get_task_instruction_openqa(question)
-                
+    prompts = [{"role": "user", "content": up} for up in user_prompts]
+    print("webpage ana prompts[0]")
+    print(prompts[0])
+
+    summ_sampling_params = SamplingParams(
+        max_tokens=8192,
+        temperature=0.6,
+        top_p=0.95,
+        stop=None
+    )
+    raw_outputs = llm.chat(
+        messages = [[prompt] for prompt in prompts],
+        sampling_params = summ_sampling_params,
+        use_tqdm=True
+    )
+    
+    extracted_infos = [extract_answer(raw.outputs[0].text, mode='infogen') for raw in raw_outputs]
+    
+    for i, (p, r, e) in enumerate(zip(prompts, raw_outputs, extracted_infos)):
+        batch_output_records.append({
+            'prompt': p,
+            'raw_output': r.outputs[0].text,
+            'extracted_info': e
+        })
+
+
+    return extracted_infos
+
+
+def run_generation(
+        sequences: List[Dict],
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+        top_k_sampling: int,
+        llm: LLM,
+        tokenizer: AutoTokenizer,
+) -> List:
+    prompts = [s['prompt'] for s in sequences]
+
+    sampling_params = SamplingParams(
+        max_tokens=max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k_sampling,
+        stop=[END_SEARCH_QUERY, tokenizer.eos_token],
+        include_stop_str_in_output=True,
+    )
+    output_list = llm.generate(prompts, sampling_params=sampling_params) 
+    print(f"run_generation completed {len(output_list)}")
+    return output_list
+
+
+def extract_between(text: str, start_tag: str, end_tag: str) -> Optional[str]:
+    pattern = re.escape(start_tag) + r"(.*?)" + re.escape(end_tag)
+    matches = re.findall(pattern, text, flags=re.DOTALL)
+    if matches:
+        return matches[-1].strip()
+    return None
+
+
+def prepare_input_prompts(
+        dataset_name: str,
+        filtered_data: List[Dict],
+        max_search_limit: int,
+        tokenizer: AutoTokenizer,
+        subset_num: int,
+) -> None:
+    input_list = []
+    for item in filtered_data:
+        question = item['Question']
+
+        if dataset_name in ['aime']:
+            instruction = get_multiqa_instruction(max_search_limit)
+            user_prompt = get_task_instruction_math(question)
+        else:
+            instruction = get_multiqa_instruction(max_search_limit)
+            user_prompt = get_task_instruction_openqa(question)
             
-            prompt = [{"role": "user", "content": instruction + user_prompt}]
-            prompt = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
-            input_list.append(prompt)
+        prompt = [{"role": "user", "content": instruction + user_prompt}]
+        prompt = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
+        input_list.append(prompt)
 
-        if subset_num != -1:
-            input_list = input_list[:subset_num]
-            filtered_data = filtered_data[:subset_num]
+    if subset_num != -1:
+        input_list = input_list[:subset_num]
+        filtered_data = filtered_data[:subset_num]
 
-        # Initialize active sequences
-        active_sequences = [{
-            'item': item,
-            'prompt': prompt,
-            'output': '',
-            'finished': False,
-            'history': [],
-            'search_count': 0,
-            'executed_search_queries': set(),
-            'all_info': [],
-        } for item, prompt in zip(filtered_data, input_list)]
+    # Initialize active sequences
+    active_sequences = [{
+        'item': item,
+        'prompt': prompt,
+        'output': '',
+        'finished': False,
+        'history': [],
+        'search_count': 0,
+        'executed_search_queries': set(),
+        'all_info': [],
+    } for item, prompt in zip(filtered_data, input_list)]
 
-        # ---------------------- Generation Function ----------------------
-        def run_generation(sequences: List[Dict], max_tokens: int) -> List:
-            prompts = [s['prompt'] for s in sequences]
+    return active_sequences, input_list
 
-            sampling_params = SamplingParams(
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                top_k=top_k_sampling,
-                stop=[END_SEARCH_QUERY, tokenizer.eos_token],
-                include_stop_str_in_output=True,
-            )
-            output_list = llm.generate(prompts, sampling_params=sampling_params) 
-            print(f"run_generation completed {len(output_list)}")
-            return output_list
 
-        # Function to extract text between two tags
-        def extract_between(text: str, start_tag: str, end_tag: str) -> Optional[str]:
-            pattern = re.escape(start_tag) + r"(.*?)" + re.escape(end_tag)
-            matches = re.findall(pattern, text, flags=re.DOTALL)
-            if matches:
-                return matches[-1].strip()
-            return None
+def parse_steps(text: str) -> dict:
+    """
+    Parses the reasoning steps from a given text.
 
-        def replace_recent_steps(origin_str, replace_str):
-            """
-            Replaces specific steps in the original reasoning steps with new steps.
-            If a replacement step contains "DELETE THIS STEP", that step is removed.
+    Parameters:
+    - text (str): The text containing reasoning steps.
 
-            Parameters:
-            - origin_str (str): The original reasoning steps.
-            - replace_str (str): The steps to replace or delete.
+    Returns:
+    - dict: A dictionary mapping step numbers to their content.
+    """
+    step_pattern = re.compile(r"Step\s+(\d+):\s*")
+    steps = {}
+    current_step_num = None
+    current_content = []
 
-            Returns:
-            - str: The updated reasoning steps after applying replacements.
-            """
+    for line in text.splitlines():
+        step_match = step_pattern.match(line)
+        if step_match:
+            # If there's an ongoing step, save its content
+            if current_step_num is not None:
+                steps[current_step_num] = "\n".join(current_content).strip()
+            current_step_num = int(step_match.group(1))
+            content = line[step_match.end():].strip()
+            current_content = [content] if content else []
+        else:
+            if current_step_num is not None:
+                current_content.append(line)
+    
+    # Save the last step if any
+    if current_step_num is not None:
+        steps[current_step_num] = "\n".join(current_content).strip()
+    
+    return steps
 
-            def parse_steps(text):
-                """
-                Parses the reasoning steps from a given text.
 
-                Parameters:
-                - text (str): The text containing reasoning steps.
+def replace_recent_steps(origin_str: str, replace_str: str) -> str:
+    """
+    Replaces specific steps in the original reasoning steps with new steps.
+    If a replacement step contains "DELETE THIS STEP", that step is removed.
 
-                Returns:
-                - dict: A dictionary mapping step numbers to their content.
-                """
-                step_pattern = re.compile(r"Step\s+(\d+):\s*")
-                steps = {}
-                current_step_num = None
-                current_content = []
+    Parameters:
+    - origin_str (str): The original reasoning steps.
+    - replace_str (str): The steps to replace or delete.
 
-                for line in text.splitlines():
-                    step_match = step_pattern.match(line)
-                    if step_match:
-                        # If there's an ongoing step, save its content
-                        if current_step_num is not None:
-                            steps[current_step_num] = "\n".join(current_content).strip()
-                        current_step_num = int(step_match.group(1))
-                        content = line[step_match.end():].strip()
-                        current_content = [content] if content else []
-                    else:
-                        if current_step_num is not None:
-                            current_content.append(line)
-                
-                # Save the last step if any
-                if current_step_num is not None:
-                    steps[current_step_num] = "\n".join(current_content).strip()
-                
-                return steps
+    Returns:
+    - str: The updated reasoning steps after applying replacements.
+    """
+    # Parse the original and replacement steps
+    origin_steps = parse_steps(origin_str)
+    replace_steps = parse_steps(replace_str)
 
-            # Parse the original and replacement steps
-            origin_steps = parse_steps(origin_str)
-            replace_steps = parse_steps(replace_str)
+    # Apply replacements
+    for step_num, content in replace_steps.items():
+        if "DELETE THIS STEP" in content: 
+            # Remove the step if it exists
+            if step_num in origin_steps:
+                del origin_steps[step_num]
+        else:
+            # Replace or add the step 
+            origin_steps[step_num] = content
 
-            # Apply replacements
-            for step_num, content in replace_steps.items():
-                if "DELETE THIS STEP" in content: 
-                    # Remove the step if it exists
-                    if step_num in origin_steps:
-                        del origin_steps[step_num]
-                else:
-                    # Replace or add the step 
-                    origin_steps[step_num] = content
+    # Sort the steps by step number
+    sorted_steps = sorted(origin_steps.items())
 
-            # Sort the steps by step number
-            sorted_steps = sorted(origin_steps.items())
+    # Reconstruct the reasoning steps as a single string
+    new_reasoning_steps = "\n\n".join([f"{content}" for num, content in sorted_steps])
 
-            # Reconstruct the reasoning steps as a single string
-            new_reasoning_steps = "\n\n".join([f"{content}" for num, content in sorted_steps])
+    return new_reasoning_steps
 
-            return new_reasoning_steps
 
-        # ---------------------- Initialize Collection Structure ----------------------
-        # Initialize a list to collect batch outputs
+def main() -> None:
+    args = parse_args()
+    data_path = args.data_path
+    subset_num = args.subset_num
+    max_search_limit = args.max_search_limit
+    max_turn = args.max_turn
+    top_k = args.top_k
+    max_doc_len = args.max_doc_len
+    model_path = args.model_path
+    temperature = args.temperature
+    top_p = args.top_p
+    top_k_sampling = args.top_k_sampling
+    max_tokens = args.max_tokens
+    output_dir_base = args.output_dir_base
+    rollout_num = args.rollout_num
+
+    print(f"CUDA_VISIBLE_DEVICES is set to: {os.environ['CUDA_VISIBLE_DEVICES']}")
+   
+    dataset_name = data_path.split('/')[-1].split('.')[0]
+
+    print('-----------------------')
+    print(f'Using {dataset_name} set.')
+    print('-----------------------')
+
+    # Reasoning Model Loading
+    llm, tokenizer = load_reasoning_model(model_path)
+
+    # Retriever Setup
+    # retriever = FinewWebRetriever(default_k=10)
+    retriever = ClueWeb22Retriever(default_k=10, use_cw22_a=False)
+
+    # Reranker Setup
+    reranker = JinaReranker()
+    # reranker = Qwen3Reranker()
+
+    # Rollout
+    for rollout_id in tqdm(range(rollout_num), desc="rollouts"):
+        print(f"\n===================Rollout {rollout_id + 1} of {rollout_num}===================")
+        
+        output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
+        filtered_data = load_data(data_path)
+
+        # Prepare input prompts
+        active_sequences, input_list = prepare_input_prompts(
+            dataset_name,
+            filtered_data,
+            max_search_limit,
+            tokenizer,
+            subset_num,
+        )
+
+        # Initialize collection structure
         batch_output_records = []
-
         start_time = time.time()
         turn = 0
+        unfinished = True
 
-        
-        # Main loop until all sequences are finished or maximum turns reached
-        while True:
-            # Identify sequences that need generation
+        # Start the interaction loop
+        while turn < max_turn and unfinished:
             sequences_needing_generation = [seq for seq in active_sequences if not seq['finished']]
-            
+
             if sequences_needing_generation:
                 turn += 1
-                print(f'\n-------------- Turn {turn} --------------')
+                print(f"\n-------------- Turn {turn} --------------")
                 print(f"We have {len(sequences_needing_generation)} sequences needing generation...")
-                outputs = run_generation(sequences_needing_generation, max_tokens) 
+                
+                outputs = run_generation(
+                    sequences_needing_generation,
+                    max_tokens,
+                    temperature,
+                    top_p,
+                    top_k_sampling,
+                    llm,
+                    tokenizer,
+                )
                 print("Generation completed, processing outputs...")
 
                 # Initialize batch variables
@@ -527,65 +486,32 @@ def main():
                 batch_documents = []
                 batch_sequences = []
 
-                # Collect URLs to fetch across all sequences
-                all_urls_to_fetch = set()
-                url_snippets = {}
-                url_sequence_map = {}  # Map URL to list of sequences needing it
-
                 start_search_time = time.time()
-                # Process each sequence and collect URLs
                 for seq, out in zip(sequences_needing_generation, outputs):
                     text = out.outputs[0].text
-                    seq['history'].append(text)
-                    # Append generated text to prompt and output
-                    seq['prompt'] += text
-                    seq['output'] += text
-                    seq['all_info'].append({f"turn_{turn}_reason": text})
+                    seq["history"].append(text)
+                    seq["prompt"] += text
+                    seq["output"] += text
+                    seq["all_info"].append({f"turn_{turn}_reason": text})
+
                     # Extract search query
                     search_query = extract_between(text, BEGIN_SEARCH_QUERY, END_SEARCH_QUERY)
+                    
+                    # If a search query is present and the needs to be executed
+                    if search_query and seq["output"].rstrip().endswith(END_SEARCH_QUERY):
+                        if seq["search_count"] < max_search_limit and search_query not in seq["executed_search_queries"]:
+                            try:
+                                print(f"Executing search for query: \"{search_query}\"")
+                                search_results = retriever(search_query)
+                                rerankered_results, _ = reranker(search_query, search_results)
+                            except Exception as e:
+                                print(f"Search failed for query \"{search_query}\": {e}")
+                                search_results = []
+                                rerankered_results = []
+                            relevant_info = extract_relevant_info(rerankered_results[:top_k])
+                            seq["relevant_info"] = relevant_info
 
-                    # If a search query is present and needs to be executed
-                    if search_query and seq['output'].rstrip().endswith(END_SEARCH_QUERY):
-                        if seq['search_count'] < MAX_SEARCH_LIMIT and search_query not in seq['executed_search_queries']:
-                            # Execute search, use cache if available
-                            if search_query in search_cache:
-                                results = search_cache[search_query]
-                                print(f"Using cached search results for query: \"{search_query}\"")
-                            else:
-                                try:
-                                    if is_exclude_urls and "urls" in seq["item"]["metadata"]: 
-                                        print(f"is_exclude_urls: {is_exclude_urls}")
-                                        exclude_urls = seq["item"]["metadata"]["urls"]
-                                    else:
-                                        exclude_urls = []
-
-                                    print(f"Execute and cache search for query: \"{search_query}\"")
-                                    results = google_web_search(search_query, google_subscription_key, google_endpoint, market='en-US', language='en', exclude_urls=exclude_urls) # 执行搜索
-                                    search_cache[search_query] = results
-                                    print(f"Executed and cached search for query: \"{search_query}\"")
-                                except Exception as e:
-                                    print(f"Error during search query '{search_query}': {e}")
-                                    search_cache[search_query] = {}
-                                    results = {}
-
-                            # Extract relevant information from Bing search results
-                            relevant_info = extract_relevant_info(results)[:top_k]
-                            seq['relevant_info'] = relevant_info
-
-                            # Extract URLs and snippets
-                            urls_to_fetch = [it['url'] for it in relevant_info]
-                            snippets = {info['url']: info['snippet'] for info in relevant_info if 'snippet' in info}
-
-                            # Filter URLs that are not cached
-                            urls_to_fetch_filtered = [u for u in urls_to_fetch if u not in url_cache]
-                            cached_urls = [u for u in urls_to_fetch if u in url_cache]
-
-                            # Store info for all_urls_to_fetch and url_snippets
-                            for url in urls_to_fetch_filtered:
-                                all_urls_to_fetch.add(url)
-                                url_snippets[url] = snippets.get(url, "") 
-
-                            all_reasoning_steps = seq['output']
+                            all_reasoning_steps = seq["output"]
                             all_reasoning_steps = all_reasoning_steps.replace('\n\n', '\n').split("\n")
 
                             truncated_prev_reasoning = ""
@@ -616,7 +542,7 @@ def main():
                             seq['search_count'] += 1
                             seq['executed_search_queries'].add(search_query)
 
-                        elif seq['search_count'] >= MAX_SEARCH_LIMIT:
+                        elif seq['search_count'] >= max_search_limit:
                             limit_message = f"\n{BEGIN_SEARCH_RESULT}\nThe maximum search limit is exceeded. You are not allowed to search.\n{END_SEARCH_RESULT}\n"
                             seq['prompt'] += limit_message
                             seq['output'] += limit_message
@@ -631,57 +557,21 @@ def main():
                             seq['history'].append(limit_message)
                             seq["all_info"].append({f"turn_{turn}_search_limited": limit_message})
                             print(f"Repeated search for query: \"{search_query}\"")
-                            
-
                     else:
                         # If no search query needs to be executed, mark the sequence as finished
                         seq['finished'] = True
                         print("Sequence marked as complete.")
 
                 print(f"get search time taken: {time.time() - start_search_time}")
-                print(f"all_urls_to_fetch len: {len(all_urls_to_fetch)}, url_cache len: {len(url_cache)}")
-                print(f"all_urls_to_fetch: {all_urls_to_fetch}")
-                # Batch fetch all URLs at once to optimize speed
-                
-                if all_urls_to_fetch:
-                    print(f"Fetching {len(all_urls_to_fetch)} URLs...")
-                    try:
-                        fetched_contents = fetch_page_content(
-                            list(all_urls_to_fetch),
-                            use_jina=False,
-                            jina_api_key=None,
-                            # snippets=url_snippets  # Do not pass snippets when updating url_cache directly
-                        )
-                        print(f"Fetched {len(fetched_contents)} URLs successfully.")
-                    except Exception as e:
-                        print(f"Error during batch URL fetching: {e}")
-                        fetched_contents = {url: f"Error fetching URL: {e}" for url in all_urls_to_fetch}
-                    # Update cache with fetched contents
-                    for url, content in fetched_contents.items():
-                        url_cache[url] = content
 
-                # After fetching, prepare formatted documents for batch processing
                 for relevant_info in batch_relevant_info:
                     formatted_documents = ""
                     for i, doc_info in enumerate(relevant_info):
-                        url = doc_info['url']
-                        raw_context = url_cache.get(url, "")
-                        doc_info['snippet'] = doc_info['snippet'].replace('<b>','').replace('</b>','')            
-                        success, filtered_context = extract_snippet_with_context(raw_context, doc_info['snippet'], context_chars=max_doc_len)
-                        if success:
-                            print("extract_snippet_with_context")
-                            context = filtered_context
-                        else: 
-                            print(f"use raw_webpage_context, {len(raw_context)}")
-                            context = raw_context[:max_doc_len*2]
-
-                        doc_info['context'] = context
                         formatted_documents += f"**Web Page {i + 1}:**\n"
                         formatted_documents += json.dumps(doc_info, ensure_ascii=False, indent=2) + "\n"
                     print(f'formatted_webpage_documents: {len(formatted_documents)}')
                     batch_documents.append(formatted_documents)
-
-                # After fetching, prepare for batch processing if there are any
+                
                 if batch_sequences:
                     print(f"Batch processing {len(batch_sequences)} sequences with generate_webpage_to_reasonchain_batch...")
                     webpage_analyses = generate_webpage_to_reasonchain_batch(
@@ -690,11 +580,10 @@ def main():
                         search_queries=batch_search_queries,
                         documents=batch_documents,
                         dataset_name=dataset_name,
-                        # summ_model_url=summ_model_url,
-                        # summ_model_path=summ_model_path,
                         batch_output_records=batch_output_records,  # Pass the collection list
+                        llm=llm,
                     )
-                    print("Batch generation completed, assigning outputs to sequences...")
+                    print("Batch generation completed, assigning outputs to sequences...")                
 
                     for seq, analysis,doc in zip(batch_sequences, webpage_analyses, batch_documents): 
                         if isinstance(analysis, str):
@@ -723,12 +612,6 @@ def main():
             with open(os.path.join(output_dir, f"turn_{turn}.json"), 'w', encoding='utf-8') as f:
                 json.dump(active_sequences_part, f, ensure_ascii=False, indent=2)
             unfinished = [seq for seq in active_sequences if not seq['finished']]
-            if not unfinished:
-                break
-            else:
-                if turn >= MAX_TURN:
-                    print(f"Maximum number of turns ({MAX_TURN}) reached, stopping.")
-                    break
 
         total_time = time.time() - start_time
         print(f"Total time taken: {total_time} seconds")
@@ -747,8 +630,7 @@ def main():
         # Prepare output list for evaluation
         output_list = [seq['output'] for seq in active_sequences]
 
-        
-        ### 対象のデータセットResearchy Queriesはnon-factoidなので評価しない
+        # Run evaluation for factoid QAs
         # if dataset_name in ["eval", "gaia"]:
         #     run_evaluation_for_eval(filtered_data, input_list, output_list, dataset_name, output_dir, total_time, 'test')
         # else:
@@ -763,37 +645,6 @@ def main():
         print(f"max_turn_file_path: {max_turn_file_path}")
         stage_wise_analysis(model_path, max_turn_file_path)
 
-
-    # ---------------------- Update Search and URL Cache ----------------------
-    print('Updating Search and URL Cache...')
-    # Load existing caches or initialize empty dictionaries
-    if os.path.exists(search_cache_path):
-        try:
-            with open(search_cache_path, 'r', encoding='utf-8') as f:
-                search_cache_new = json.load(f)
-        except Exception as e:
-            print(f"Error loading search cache: {e}")
-            search_cache_new = {}
-    else:
-        search_cache_new = {}
-
-    if os.path.exists(url_cache_path):
-        try:
-            with open(url_cache_path, 'r', encoding='utf-8') as f:
-                url_cache_new = json.load(f)
-        except Exception as e:
-            print(f"Error loading url cache: {e}")
-            url_cache_new = {}
-    else:
-        url_cache_new = {}
-
-    search_cache.update(search_cache_new)
-    url_cache.update(url_cache_new)
-
-    save_caches()
-
-
-    print("Process completed.")
 
 if __name__ == "__main__":
     main()

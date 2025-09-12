@@ -9,6 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-# temporary ignore
-original_datasets/deepresearchgym/
+# dataset directories
+sampled_data/
+
+# PNG files
 *.png
