@@ -3,7 +3,6 @@ import json
 import os
 import re
 import time
-from typing import Dict, List, Optional, Tuple
 
 import torch
 from tqdm import tqdm
@@ -28,7 +27,7 @@ BEGIN_SEARCH_RESULT = "<|begin_search_result|>"
 END_SEARCH_RESULT = "<|end_search_result|>"
 
 
-def load_reasoning_model(model_path: str) -> Tuple[LLM, AutoTokenizer]:
+def load_reasoning_model(model_path: str) -> tuple[LLM, AutoTokenizer]:
     print(f"Loading tokenizer from {model_path}...")
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     if tokenizer.pad_token is None:
@@ -56,7 +55,7 @@ def make_output_dir(output_dir_base: str, dataset_name: str, rollout_id: int) ->
     return output_dir
 
 
-def load_data(data_path: str) -> List[Dict]:
+def load_data(data_path: str) -> list[dict]:
     print(f"Loading data from {data_path}...")
     with open(data_path, "r", encoding="utf-8") as json_file:
         filtered_data = json.load(json_file)
@@ -77,15 +76,15 @@ def extract_relevant_info(search_results):
 
 
 def generate_webpage_to_reasonchain_batch(
-    original_questions: List[str],
-    prev_reasonings: List[str],
-    search_queries: List[str],
-    documents: List[str],
+    original_questions: list[str],
+    prev_reasonings: list[str],
+    search_queries: list[str],
+    documents: list[str],
     dataset_name: str,
-    batch_output_records: List[Dict],  # New parameter to collect outputs
+    batch_output_records: list[dict],  # New parameter to collect outputs
     llm: LLM,
     coherent: bool = False,
-) -> List[str]:
+) -> list[str]:
 
     user_prompts = [
         get_webpage_to_reasonchain_instruction(r, sq, doc)
@@ -116,14 +115,14 @@ def generate_webpage_to_reasonchain_batch(
 
 
 def run_generation(
-    sequences: List[Dict],
+    sequences: list[dict],
     max_tokens: int,
     temperature: float,
     top_p: float,
     top_k_sampling: int,
     llm: LLM,
     tokenizer: AutoTokenizer,
-) -> List:
+) -> list:
     prompts = [s["prompt"] for s in sequences]
 
     sampling_params = SamplingParams(
@@ -139,7 +138,7 @@ def run_generation(
     return output_list
 
 
-def extract_between(text: str, start_tag: str, end_tag: str) -> Optional[str]:
+def extract_between(text: str, start_tag: str, end_tag: str) -> str | None:
     pattern = re.escape(start_tag) + r"(.*?)" + re.escape(end_tag)
     matches = re.findall(pattern, text, flags=re.DOTALL)
     if matches:
@@ -148,7 +147,7 @@ def extract_between(text: str, start_tag: str, end_tag: str) -> Optional[str]:
 
 
 def prepare_input_prompts(
-    filtered_data: List[Dict],
+    filtered_data: list[dict],
     max_search_limit: int,
     tokenizer: AutoTokenizer,
     subset_num: int,
