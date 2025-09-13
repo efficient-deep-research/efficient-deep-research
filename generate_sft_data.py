@@ -28,88 +28,6 @@ BEGIN_SEARCH_RESULT = "<|begin_search_result|>"
 END_SEARCH_RESULT = "<|end_search_result|>"
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run SimpleDeepsearcer for various datasets."
-    )
-
-    parser.add_argument(
-        "--data_path", type=str, required=True, help="Path to the dataset to use."
-    )
-
-    parser.add_argument(
-        "--subset_num",
-        type=int,
-        default=-1,
-        help="Number of examples to process. Defaults to all if not specified.",
-    )
-
-    # Search and document retrieval configuration
-    parser.add_argument(
-        "--max_search_limit",
-        type=int,
-        default=10,
-        help="Maximum number of searches per question.",
-    )
-
-    parser.add_argument(
-        "--max_turn", type=int, default=15, help="Maximum number of turns."
-    )
-
-    parser.add_argument(
-        "--top_k",
-        type=int,
-        default=10,
-        help="Maximum number of search documents to return.",
-    )
-
-    parser.add_argument(
-        "--max_doc_len",
-        type=int,
-        default=3000,
-        help="Maximum length of each searched document.",
-    )
-
-    # Model configuration
-    parser.add_argument(
-        "--model_path", type=str, required=True, help="Path to the reasoning model."
-    )
-
-    # Sampling parameters
-    parser.add_argument(
-        "--temperature", type=float, default=0.6, help="Sampling temperature."
-    )
-
-    parser.add_argument(
-        "--top_p", type=float, default=0.95, help="Top-p sampling parameter."
-    )
-
-    parser.add_argument(
-        "--top_k_sampling", type=int, default=40, help="Top-k sampling parameter."
-    )
-
-    parser.add_argument(
-        "--max_tokens",
-        type=int,
-        default=20480,
-        help="Maximum number of tokens to generate.",
-    )
-
-    parser.add_argument("--cache_dir_base", type=str, required=True, help="cache path.")
-
-    parser.add_argument("--output_dir_base", type=str, required=True, help="output_dir")
-
-    parser.add_argument(
-        "--is_exclude_urls", action="store_true", help="is_exclude_urls"
-    )
-
-    parser.add_argument(
-        "--rollout_num", type=int, default=1, help="The number of rollout per question"
-    )
-
-    return parser.parse_args()
-
-
 def load_reasoning_model(model_path: str) -> Tuple[LLM, AutoTokenizer]:
     print(f"Loading tokenizer from {model_path}...")
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
@@ -340,8 +258,7 @@ def replace_recent_steps(origin_str: str, replace_str: str) -> str:
     return new_reasoning_steps
 
 
-def main() -> None:
-    args = parse_args()
+def main(args: argparse.Namespace):
     data_path = args.data_path
     subset_num = args.subset_num
     max_search_limit = args.max_search_limit
@@ -648,4 +565,84 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Run SimpleDeepsearcer for various datasets."
+    )
+
+    parser.add_argument(
+        "--data_path", type=str, required=True, help="Path to the dataset to use."
+    )
+
+    parser.add_argument(
+        "--subset_num",
+        type=int,
+        default=-1,
+        help="Number of examples to process. Defaults to all if not specified.",
+    )
+
+    # Search and document retrieval configuration
+    parser.add_argument(
+        "--max_search_limit",
+        type=int,
+        default=10,
+        help="Maximum number of searches per question.",
+    )
+
+    parser.add_argument(
+        "--max_turn", type=int, default=15, help="Maximum number of turns."
+    )
+
+    parser.add_argument(
+        "--top_k",
+        type=int,
+        default=10,
+        help="Maximum number of search documents to return.",
+    )
+
+    parser.add_argument(
+        "--max_doc_len",
+        type=int,
+        default=3000,
+        help="Maximum length of each searched document.",
+    )
+
+    # Model configuration
+    parser.add_argument(
+        "--model_path", type=str, required=True, help="Path to the reasoning model."
+    )
+
+    # Sampling parameters
+    parser.add_argument(
+        "--temperature", type=float, default=0.6, help="Sampling temperature."
+    )
+
+    parser.add_argument(
+        "--top_p", type=float, default=0.95, help="Top-p sampling parameter."
+    )
+
+    parser.add_argument(
+        "--top_k_sampling", type=int, default=40, help="Top-k sampling parameter."
+    )
+
+    parser.add_argument(
+        "--max_tokens",
+        type=int,
+        default=20480,
+        help="Maximum number of tokens to generate.",
+    )
+
+    parser.add_argument("--cache_dir_base", type=str, required=True, help="cache path.")
+
+    parser.add_argument("--output_dir_base", type=str, required=True, help="output_dir")
+
+    parser.add_argument(
+        "--is_exclude_urls", action="store_true", help="is_exclude_urls"
+    )
+
+    parser.add_argument(
+        "--rollout_num", type=int, default=1, help="The number of rollout per question"
+    )
+
+    args = parser.parse_args()
+
+    main(args)
