@@ -14,9 +14,8 @@ from search.rerankers import JinaReranker
 from search.retrievers import ClueWeb22Retriever
 from utils import extract_answer
 from utils.prompts import (
-    get_multiqa_instruction,
-    get_task_instruction_math,
-    get_task_instruction_openqa,
+    get_qa_instruction,
+    get_task_instruction,
     get_webpage_to_reasonchain_instruction,
 )
 from utils.stage_wise_analysis import stage_wise_analysis
@@ -231,7 +230,6 @@ def extract_between(text: str, start_tag: str, end_tag: str) -> Optional[str]:
 
 
 def prepare_input_prompts(
-    dataset_name: str,
     filtered_data: List[Dict],
     max_search_limit: int,
     tokenizer: AutoTokenizer,
@@ -241,12 +239,8 @@ def prepare_input_prompts(
     for item in filtered_data:
         question = item["Question"]
 
-        if dataset_name in ["aime"]:
-            instruction = get_multiqa_instruction(max_search_limit)
-            user_prompt = get_task_instruction_math(question)
-        else:
-            instruction = get_multiqa_instruction(max_search_limit)
-            user_prompt = get_task_instruction_openqa(question)
+        instruction = get_qa_instruction(max_search_limit)
+        user_prompt = get_task_instruction(question)
 
         prompt = [{"role": "user", "content": instruction + user_prompt}]
         prompt = tokenizer.apply_chat_template(
@@ -392,7 +386,6 @@ def main() -> None:
 
         # Prepare input prompts
         active_sequences, input_list = prepare_input_prompts(
-            dataset_name,
             filtered_data,
             max_search_limit,
             tokenizer,
