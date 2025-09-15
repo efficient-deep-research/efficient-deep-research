@@ -14,3 +14,6 @@ sampled_data/
 
 # PNG files
 *.png
+
+# source files for development
+synthesis_src/
