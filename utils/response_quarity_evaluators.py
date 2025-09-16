@@ -70,7 +70,7 @@ def evaluate_with_llm_judge(
     return judges
 
 
-def evaluate_kpr_batch(
+def evaluate_kpr(
     key_points_collection: list, 
     answers: list,
     llm: LLM = None,
@@ -118,7 +118,7 @@ def evaluate_kpr_batch(
     return kpr_results
 
 
-def evaluate_criteria_batch(
+def evaluate_criteria(
     questions: List[str],
     answers: List[str],
     eval_criteria: List[str],
@@ -153,12 +153,14 @@ def evaluate_criteria_batch(
 
 
 
-def evaluate_reasoning_quality(
+def evaluate_response_quality(
     input_data: dict,
+    model_path: str = "Qwen/Qwen3-30B-A3B-Thinking-2507",
+    eval_criteria: List[str] = ["Clarity", "Insightfulness"]
 ):
     
     llm = LLM(
-        model="Qwen/Qwen3-30B-A3B-Thinking-2507",
+        model=model_path,
         guided_decoding_backend="xgrammar",
         tensor_parallel_size=torch.cuda.device_count(),
         gpu_memory_utilization=0.95,
@@ -177,15 +179,16 @@ def evaluate_reasoning_quality(
             reconstruction_map.append((query, rollout_idx))
 
     # evaluate KPR
-    eval_kpr_results = evaluate_kpr_batch(
+    print("Evaluating Key Point Recall (KPR)...")
+    eval_kpr_results = evaluate_kpr(
         flat_key_points_collection, 
         flat_final_answers, 
         llm=llm
     )
 
     # evaluate clarity and insightfulness
-    eval_criteria = ["Clarity", "Insightfulness"]
-    eval_criteria_results = evaluate_criteria_batch(
+    print(f"Evaluating Criteria ...")
+    eval_criteria_results = evaluate_criteria(
         flat_questions,
         flat_final_answers,
         eval_criteria,
@@ -205,13 +208,10 @@ def evaluate_reasoning_quality(
         results[query][rollout_idx]["kpr"] = eval_kpr_results[i]
         results[query][rollout_idx]["criteria_evaluation"] = eval_criteria_results[i]
     
-    with open("test_reasoning_quality_evaluation_1sample.json", "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2, ensure_ascii=False)
+    # with open("test_reasoning_quality_evaluation_1sample.json", "w", encoding="utf-8") as f:
+    #     json.dump(results, f, indent=2, ensure_ascii=False)
 
     return results
-
-
-
 
 
 if __name__ == "__main__":
@@ -221,5 +221,9 @@ if __name__ == "__main__":
     
     with open(args.input_file, "r", encoding="utf-8") as f:
         input_data = json.load(f)
-    
-    evaluate_reasoning_quality(input_data)
+
+    evaluate_response_quality(
+        input_data=input_data,
+        model_path="Qwen/Qwen3-30B-A3B-Thinking-2507",
+        eval_criteria=["Clarity", "Insightfulness"]
+    )

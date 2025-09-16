@@ -257,6 +257,66 @@ def replace_recent_steps(origin_str: str, replace_str: str) -> str:
     return new_reasoning_steps
 
 
+def save_checkpoint(
+    output_dir: str, 
+    rollout_id: int, 
+    turn: int, 
+    active_sequences: list, 
+    batch_output_records: list
+):
+    # Convert sets to lists for JSON serialization
+    serializable_sequences = []
+    for seq in active_sequences:
+        seq_copy = seq.copy()
+        # Convert set to list for JSON serialization
+        seq_copy["executed_search_queries"] = list(seq["executed_search_queries"])
+        serializable_sequences.append(seq_copy)
+    
+    # Save checkpoint data to a JSON file
+    checkpoint_data = {
+        "rollout_id": rollout_id,
+        "turn": turn,
+        "active_sequences": serializable_sequences,
+        "batch_output_records": batch_output_records,
+        "timestamp": time.time()
+    }
+    checkpoint_path = os.path.join(output_dir, "checkpoint.json")
+    with open(checkpoint_path, "w", encoding="utf-8") as f:
+        json.dump(checkpoint_data, f, ensure_ascii=False, indent=2)
+    print(f"Checkpoint saved: {checkpoint_path}")
+
+
+def load_checkpoint(output_dir: str) -> dict | None:
+    # Load checkpoint data from a JSON file if it exists
+    checkpoint_path = os.path.join(output_dir, "checkpoint.json")
+    if os.path.exists(checkpoint_path):
+        with open(checkpoint_path, "r", encoding="utf-8") as f:
+            checkpoint_data = json.load(f)
+        
+        # Convert lists back to sets after loading
+        for seq in checkpoint_data["active_sequences"]:
+            seq["executed_search_queries"] = set(seq["executed_search_queries"])
+        
+        print(f"Checkpoint loaded: {checkpoint_path}")
+        return checkpoint_data
+    return None
+
+
+
+def find_last_rollout(output_dir_base: str, dataset_name: str) -> int:
+    # Check for existing rollout directories
+    dataset_dir = os.path.join(output_dir_base, dataset_name)
+    if not os.path.exists(dataset_dir):
+        return -1
+    
+    rollout_dirs = [d for d in os.listdir(dataset_dir) if d.startswith("rollout_")]
+    if not rollout_dirs:
+        return -1
+    
+    rollout_numbers = [int(d.split("_")[1]) for d in rollout_dirs]
+    return max(rollout_numbers)
+
+
 def main(args: argparse.Namespace):
     data_path = args.data_path
     subset_num = args.subset_num
@@ -275,7 +335,7 @@ def main(args: argparse.Namespace):
     print(f"CUDA_VISIBLE_DEVICES is set to: {os.environ['CUDA_VISIBLE_DEVICES']}")
 
     dataset_name = data_path.split("/")[-1].split(".")[0]
-
+    
     print("-----------------------")
     print(f"Using {dataset_name} set.")
     print("-----------------------")
@@ -291,27 +351,59 @@ def main(args: argparse.Namespace):
     reranker = JinaReranker()
     # reranker = Qwen3Reranker()
 
+    # load last rollout
+    last_rollout = find_last_rollout(output_dir_base, dataset_name)
+
+    is_rollout_initialized = False # True if the initialization when starting the rollout is done
+
+    if args.auto_resume and last_rollout >= 0:
+        rollout_id = last_rollout
+        output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
+        checkpoint = load_checkpoint(output_dir)
+        
+        assert rollout_num > rollout_id, (
+            f"rollout_num ({rollout_num}) must be greater than current rollout_id ({rollout_id}) "
+            f"when using auto_resume. Current rollout: {rollout_id}, Target rollouts: {rollout_num}"
+        )
+        
+        if checkpoint:
+            print(f"Resuming from rollout {rollout_id}, turn {checkpoint['turn']}")
+            # restore state from checkpoint
+            active_sequences = checkpoint["active_sequences"]
+            batch_output_records = checkpoint["batch_output_records"]
+            start_turn = checkpoint["turn"]
+            filtered_data = load_data(data_path)
+            is_rollout_initialized = True
+        else:
+            print("No valid checkpoint found, starting a new rollout.")
+            rollout_id = last_rollout + 1
+    else:
+        rollout_id = 0
+
+
     # Rollout
-    for rollout_id in tqdm(range(rollout_num), desc="rollouts"):
+    while rollout_id < rollout_num:
         print(
             f"\n===================Rollout {rollout_id + 1} of {rollout_num}==================="
         )
 
-        output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
-        filtered_data = load_data(data_path)
+        if not is_rollout_initialized:
+            active_sequences, input_list = prepare_input_prompts(
+                load_data(data_path),
+                max_search_limit,
+                tokenizer,
+                subset_num,
+            )
+            batch_output_records = []
+            start_turn = 0
+            output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
+            filtered_data = load_data(data_path)
 
-        # Prepare input prompts
-        active_sequences, input_list = prepare_input_prompts(
-            filtered_data,
-            max_search_limit,
-            tokenizer,
-            subset_num,
-        )
-
+        is_rollout_initialized = False
+        
         # Initialize collection structure
-        batch_output_records = []
         start_time = time.time()
-        turn = 0
+        turn = start_turn
         unfinished = True
 
         # Start the interaction loop
@@ -523,6 +615,8 @@ def main(args: argparse.Namespace):
                 os.path.join(output_dir, f"turn_{turn}.json"), "w", encoding="utf-8"
             ) as f:
                 json.dump(active_sequences_part, f, ensure_ascii=False, indent=2)
+            
+            save_checkpoint(output_dir, rollout_id, turn, active_sequences, batch_output_records)
             unfinished = [seq for seq in active_sequences if not seq["finished"]]
 
         total_time = time.time() - start_time
@@ -561,6 +655,13 @@ def main(args: argparse.Namespace):
         max_turn_file_path = os.path.join(output_dir, max_turn_file)
         print(f"max_turn_file_path: {max_turn_file_path}")
         stage_wise_analysis(model_path, max_turn_file_path)
+        
+        checkpoint_path = os.path.join(output_dir, "checkpoint.json")
+        if os.path.exists(checkpoint_path):
+            os.remove(checkpoint_path)
+            print(f"Checkpoint removed: {checkpoint_path}")
+        
+        rollout_id += 1
 
 
 if __name__ == "__main__":
@@ -642,6 +743,12 @@ if __name__ == "__main__":
         "--rollout_num", type=int, default=1, help="The number of rollout per question"
     )
 
+    parser.add_argument(
+        "--auto_resume", 
+        action="store_true", 
+        help="Automatically resume from the last checkpoint if available"
+    )    
+    
     args = parser.parse_args()
 
     main(args)
