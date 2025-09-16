@@ -9,12 +9,11 @@ import numpy as np
 from tqdm import tqdm
 import argparse
 
-from utils.response_format_validators import {
+from utils.response_format_validators import (
     detect_repeat,
     detect_variant_markers,
     is_valid_history
-}
-
+)
 
 
 def plot_distribution(data, title="Distribution of First Reason Length", bins=40, name="url", xlabel="First Reason Length", ylabel="Frequency", output_path=""):
@@ -48,6 +47,7 @@ def plot_distribution(data, title="Distribution of First Reason Length", bins=40
               f"Value = {value:.2f}, "
               f"Count = {count_below}, "
               f"Percentage = {percentage:.2f}%")
+
 
 
 def parse_web_pages(web_page_str):
@@ -84,9 +84,6 @@ def parse_web_pages(web_page_str):
 
 
 
-
-
-
 def sort_solution(data):
     """
     Sort a list containing dictionaries.
@@ -100,6 +97,8 @@ def sort_solution(data):
     )
     return sorted_data
 
+
+
 def sort_query(data):
     """
     Sort a list containing dictionaries.
@@ -111,7 +110,6 @@ def sort_query(data):
     #     key=lambda x: (x["ratios"], -x["min_search"])
     # )
     return sorted_data
-
 
 
 
@@ -277,10 +275,15 @@ if __name__ == "__main__":
 
     merge_qa_pairs_path = os.path.join(output_path, "merged_qa_pairs.json")
     selected_data_path = os.path.join(output_path, "selected_data.json")
-
+    
     print("Merge question-answer pairs...")
     result = merge_questions(root_path)
     print(f"len of all question-answer pairs: {len(result)}")
+    
+    # add kpr
+    
+    # add quality evaluation
+    
 
     print("Select valid solutions...")
     metrics_distribution_path = os.path.join(output_path, "metrics_distribution")
