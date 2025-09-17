@@ -1,5 +1,5 @@
 import re
-
+from collections import defaultdict
 
 
 def extract_incorrect_markers(input_string):

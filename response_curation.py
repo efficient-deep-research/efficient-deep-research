@@ -15,7 +15,10 @@ from utils.response_format_validators import (
     is_valid_history
 )
 
-from utils.response_quarity_evaluators import evaluate_response_quality
+from utils.response_quarity_evaluators import (
+    evaluate_response_quality,
+    extract_final_answer
+)
 
 
 def plot_distribution(data, title="Distribution of First Reason Length", bins=40, name="url", xlabel="First Reason Length", ylabel="Frequency", output_path=""):
@@ -158,6 +161,7 @@ def merge_questions(root_path):
             if max_num is not None:
                 file_name = f"turn_{max_num}.json"
                 file_path = os.path.join(rollout_path, file_name)
+                print(f"Detected file: {file_path} for merging.")
                 try:
                     with open(file_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
@@ -182,6 +186,11 @@ def curate_and_rank_solutions(data, output_path):
     max_alt = []
     max_hmm = []
     max_wait = []
+    final_answer_length = []
+    kpr = []
+    kpc = []
+    clarity = []
+    insightfulness = []
     """
     Curate and rank solution candidates for each question based on quality metrics.
     
@@ -219,6 +228,9 @@ def curate_and_rank_solutions(data, output_path):
             urls = set(search_results)
 
             # Compute quality metrics and update entry
+            output = entry["output"]
+            entry["final_answer"] = extract_final_answer(output)
+            entry["final_answer_length"] = len(entry["final_answer"].split(' ')) if entry["final_answer"] else 0
             entry["first_reason_length"] = len(reason_1.split(' '))
             entry["has_repeat"], entry["repeated_n_grams"] = detect_repeat(entry["output"])
             entry["error_special_token"], entry["is_valid_history"] = detect_variant_markers(entry["output"]), is_valid_history(entry["history"])
@@ -239,6 +251,11 @@ def curate_and_rank_solutions(data, output_path):
             max_alt.append(entry["max_alt"])
             max_hmm.append(entry["max_hmm"])
             max_wait.append(entry["max_wait"])
+            final_answer_length.append(entry["final_answer_length"])
+            kpr.append(entry["kpr"]["supported_rate"])
+            kpc.append(entry["kpr"]["contradicted_rate"])
+            clarity.append(entry["criteria_evaluation"]["Clarity"]["rating"])
+            insightfulness.append(entry["criteria_evaluation"]["Insightfulness"]["rating"])
             
             # TODO: add conditions for is_valid_solution
             entry["is_valid_solution"] = True
@@ -256,6 +273,11 @@ def curate_and_rank_solutions(data, output_path):
     plot_distribution(max_alt, title="max_alt", name="max_alt", xlabel="max_alt", ylabel="count", output_path=output_path)
     plot_distribution(max_hmm, title="max_hmm", name="max_hmm", xlabel="max_hmm", ylabel="count", output_path=output_path)
     plot_distribution(max_wait, title="max_wait", name="max_wait", xlabel="max_wait", ylabel="count", output_path=output_path)
+    plot_distribution(final_answer_length, title="final_answer_length", name="final_answer", xlabel="final_answer_length", ylabel="count", output_path=output_path)
+    plot_distribution(kpr, title="kpr", name="kpr", xlabel="kpr", ylabel="count", output_path=output_path)
+    plot_distribution(kpc, title="kpc", name="kpc", xlabel="kpc", ylabel="count", output_path=output_path)
+    plot_distribution(clarity, title="clarity", name="clarity", xlabel="clarity", ylabel="count", output_path=output_path)
+    plot_distribution(insightfulness, title="insightfulness", name="insightfulness", xlabel="insightfulness", ylabel="count", output_path=output_path)
     
     # Sort samples. TODO: refine sorting criteria
     result = sort_query(result)
