@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import time
+import types
 
 from transformers import AutoTokenizer
 
@@ -123,6 +124,24 @@ def find_last_rollout(output_dir_base: str, dataset_name: str) -> int:
     return max(rollout_numbers)
 
 
+def with_429_retry(func, max_retries=5, initial_wait=5):
+    def wrapper(*args, **kwargs):
+        wait_time = initial_wait
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                if "429" in str(e):
+                    print(f"Received 429 error. Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    wait_time *= 2
+                else:
+                    raise e
+        raise Exception("Max retries exceeded.")
+
+    return wrapper
+
+
 def main(args: argparse.Namespace):
     data_path = args.data_path
     subset_num = args.subset_num
@@ -146,6 +165,7 @@ def main(args: argparse.Namespace):
 
     # Initialize retriever
     retriever = load_retriever(args.retriever, default_k=args.retriever_top_k, **json.loads(args.retriever_kwargs))
+    retriever.__call__ = types.MethodType(with_429_retry(retriever.__call__), retriever)
 
     # Initialize reranker
     reranker = None
