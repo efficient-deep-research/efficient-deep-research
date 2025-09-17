@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "einops>=0.8.1",
+    "fastapi[standard]>=0.116.1",
     "requests>=2.32.5",
     "torch>=2.8.0",
     "transformers>=4.56.0",
