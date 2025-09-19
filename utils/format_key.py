@@ -8,11 +8,13 @@ import seaborn as sns
 from collections import Counter
 import numpy as np
 import re
+
 # Define special tokens
 BEGIN_SEARCH_QUERY = "<|begin_search_query|>"
 END_SEARCH_QUERY = "<|end_search_query|>"
 BEGIN_SEARCH_RESULT = "<|begin_search_result|>"
 END_SEARCH_RESULT = "<|end_search_result|>"
+
 
 def load_json(file_path):
     with open(file_path, "r", encoding="utf-8") as file:
@@ -20,17 +22,20 @@ def load_json(file_path):
     print(f"Loaded {len(data)} items from {file_path}")
     return data
 
+
 def save_json(data, file_path):
     with open(file_path, "w", encoding="utf-8") as file:
         json.dump(data, file, ensure_ascii=False, indent=4)
     print(f"Saved {len(data)} items to {file_path}")
 
+
 def extract_between(text: str, start_tag: str, end_tag: str) -> Optional[str]:
-        pattern = re.escape(start_tag) + r"(.*?)" + re.escape(end_tag)
-        matches = re.findall(pattern, text, flags=re.DOTALL)
-        if matches:
-            return matches[-1].strip()
-        return None
+    pattern = re.escape(start_tag) + r"(.*?)" + re.escape(end_tag)
+    matches = re.findall(pattern, text, flags=re.DOTALL)
+    if matches:
+        return matches[-1].strip()
+    return None
+
 
 def process_all_info(all_info):
     processd_info = []
@@ -40,11 +45,11 @@ def process_all_info(all_info):
         keys = list(info.keys())
         assert len(keys) == 1, f"Expecting only one key in the info dict, but got {keys}"
         if keys[0].endswith("_reason"):
-            if "<|begin_search_result|>" in info[keys[0]] or "<|end_search_result|>" in info[keys[0]]: # 捏造搜索结果
+            if "<|begin_search_result|>" in info[keys[0]] or "<|end_search_result|>" in info[keys[0]]:  # 捏造搜索结果
                 # print(f"error: {info[keys[0]]}")
                 error_cnt += 1
             processd_info.append({"gen": info[keys[0]]})
-            search_query = extract_between(info[keys[0]], BEGIN_SEARCH_QUERY, END_SEARCH_QUERY) # 提取搜索的query
+            search_query = extract_between(info[keys[0]], BEGIN_SEARCH_QUERY, END_SEARCH_QUERY)  # 提取搜索的query
 
             if search_query:
                 processd_info.append({"search_query": search_query})
@@ -56,19 +61,19 @@ def process_all_info(all_info):
             if "<|begin_search_result|>" in info[keys[0]] or "<|end_search_result|>" in info[keys[0]]:
                 error_cnt += 1
 
-            doc_gen = f"\n\n{BEGIN_SEARCH_RESULT}{info[keys[0]]}{END_SEARCH_RESULT}\n\n" # 封装处理结果，添加到序列的历史记录、提示和输出中
+            doc_gen = f"\n\n{BEGIN_SEARCH_RESULT}{info[keys[0]]}{END_SEARCH_RESULT}\n\n"  # 封装处理结果，添加到序列的历史记录、提示和输出中
             processd_info.append({"doc_gen": doc_gen})
 
         elif keys[0].endswith("_search_limited"):
             processd_info.append({"doc_gen": info[keys[0]]})
-            
+
         else:
             print(f"Unknown key {keys[0]} in the info dict, skipping...")
-    
+
     return processd_info, error_cnt
 
 
-def get_output(all_info): # 拼接得到完整的输出
+def get_output(all_info):  # 拼接得到完整的输出
     output_text = ""
     for info in all_info:
         for key, value in info.items():
@@ -78,21 +83,18 @@ def get_output(all_info): # 拼接得到完整的输出
                 output_text += value
     return output_text
 
+
 def format_key(data):
     new_data = []
     for item in tqdm(data):
         processed_info, error_cnt = process_all_info(item["all_info"])
         if error_cnt > 0:
             print(f"Error processing item: {item['item']['Question']}")
-        
+
         output_text = get_output(processed_info)
         assert output_text == item["output"], f"Output mismatch for item: {item['item']['Question']}"
-        new_item = {
-            "question": item["item"]["Question"],
-            "input": item["input"],
-            "output": processed_info,
-        }
-        
+        new_item = {"question": item["item"]["Question"], "input": item["input"], "output": processed_info}
+
         new_data.append(new_item)
 
     return new_data

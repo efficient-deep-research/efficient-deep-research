@@ -22,9 +22,7 @@ def get_task_instruction(question: str) -> str:
     return user_prompt
 
 
-def get_webpage_to_reasonchain_instruction(
-    prev_reasoning: str, search_query: str, document: str
-) -> str:
+def get_webpage_to_reasonchain_instruction(prev_reasoning: str, search_query: str, document: str) -> str:
     return f"""**Task Instruction:**
 
 You are tasked with reading and analyzing web pages based on the following inputs: **Previous Reasoning Steps**, **Current Search Query**, and **Searched Web Pages**. Your objective is to extract relevant and helpful information for **Current Search Query** from the **Searched Web Pages** and seamlessly integrate this information into the **Previous Reasoning Steps** to continue reasoning for the original question.
@@ -57,5 +55,3 @@ You are tasked with reading and analyzing web pages based on the following input
 
 Now you should analyze each web page and find helpful information based on the current search query "{search_query}" and previous reasoning steps.
 """
-
-

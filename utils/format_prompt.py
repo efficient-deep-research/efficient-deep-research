@@ -1,10 +1,12 @@
 import json
 
+
 def load_json(file_path):
     with open(file_path, "r", encoding="utf-8") as file:
         data = json.load(file)
     print(f"Loaded {len(data)} items from {file_path}")
     return data
+
 
 def save_json(data, file_path):
     with open(file_path, "w", encoding="utf-8") as file:
@@ -14,10 +16,11 @@ def save_json(data, file_path):
 
 def get_task_instruction_openqa(question):
     return (
-        'Please answer the following question. '
-        'You should provide your final answer in the format \\boxed{YOUR_ANSWER}.\n\n'
-        f'Question:\n{question}\n\n'
+        "Please answer the following question. "
+        "You should provide your final answer in the format \\boxed{YOUR_ANSWER}.\n\n"
+        f"Question:\n{question}\n\n"
     )
+
 
 def get_multiqa_search_o1_instruction(MAX_SEARCH_LIMIT):
     return (
@@ -33,9 +36,10 @@ def get_multiqa_search_o1_instruction(MAX_SEARCH_LIMIT):
         "- Do not generate <|begin_search_result|> and <|end_search_result|> tags yourself.\n\n"
     )
 
+
 def format_prompt(data, MAX_SEARCH_LIMIT=10):
     for item in data:
-        question = item['question']
+        question = item["question"]
         instruction = get_multiqa_search_o1_instruction(MAX_SEARCH_LIMIT)
         user_prompt = get_task_instruction_openqa(question)
 

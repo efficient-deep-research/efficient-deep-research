@@ -12,11 +12,7 @@ from vllm import LLM, SamplingParams
 from search.rerankers import JinaReranker
 from search.retrievers import ClueWeb22Retriever
 from utils import extract_answer
-from utils.prompts import (
-    get_qa_instruction,
-    get_task_instruction,
-    get_webpage_to_reasonchain_instruction,
-)
+from utils.prompts import get_qa_instruction, get_task_instruction, get_webpage_to_reasonchain_instruction
 from utils.stage_wise_analysis import stage_wise_analysis
 
 
@@ -39,11 +35,7 @@ def load_reasoning_model(model_path: str) -> tuple[LLM, AutoTokenizer]:
     print(f"device_count: {torch.cuda.device_count()}")
 
     # Initialize the LLM
-    llm = LLM(
-        model=model_path,
-        tensor_parallel_size=torch.cuda.device_count(),
-        gpu_memory_utilization=0.95,
-    )
+    llm = LLM(model=model_path, tensor_parallel_size=torch.cuda.device_count(), gpu_memory_utilization=0.95)
     print("Model loaded successfully.")
     return llm, tokenizer
 
@@ -66,10 +58,7 @@ def load_data(data_path: str) -> list[dict]:
 def extract_relevant_info(search_results):
     useful_info = []
     for doc in search_results:
-        info = {
-            "context": doc.text,
-            "url": doc.url,
-        }
+        info = {"context": doc.text, "url": doc.url}
         useful_info.append(info)
 
     return useful_info
@@ -85,7 +74,6 @@ def generate_webpage_to_reasonchain_batch(
     llm: LLM,
     coherent: bool = False,
 ) -> list[str]:
-
     user_prompts = [
         get_webpage_to_reasonchain_instruction(r, sq, doc)
         for r, sq, doc in zip(prev_reasonings, search_queries, documents)
@@ -95,21 +83,15 @@ def generate_webpage_to_reasonchain_batch(
     print("webpage ana prompts[0]")
     print(prompts[0])
 
-    summ_sampling_params = SamplingParams(
-        max_tokens=8192, temperature=0.6, top_p=0.95, stop=None
-    )
+    summ_sampling_params = SamplingParams(max_tokens=8192, temperature=0.6, top_p=0.95, stop=None)
     raw_outputs = llm.chat(
-        messages=[[prompt] for prompt in prompts],
-        sampling_params=summ_sampling_params,
-        use_tqdm=True,
+        messages=[[prompt] for prompt in prompts], sampling_params=summ_sampling_params, use_tqdm=True
     )
 
     extracted_infos = [extract_answer(raw.outputs[0].text) for raw in raw_outputs]
 
     for i, (p, r, e) in enumerate(zip(prompts, raw_outputs, extracted_infos)):
-        batch_output_records.append(
-            {"prompt": p, "raw_output": r.outputs[0].text, "extracted_info": e}
-        )
+        batch_output_records.append({"prompt": p, "raw_output": r.outputs[0].text, "extracted_info": e})
 
     return extracted_infos
 
@@ -147,10 +129,7 @@ def extract_between(text: str, start_tag: str, end_tag: str) -> str | None:
 
 
 def prepare_input_prompts(
-    filtered_data: list[dict],
-    max_search_limit: int,
-    tokenizer: AutoTokenizer,
-    subset_num: int,
+    filtered_data: list[dict], max_search_limit: int, tokenizer: AutoTokenizer, subset_num: int
 ) -> None:
     input_list = []
     for item in filtered_data:
@@ -160,9 +139,7 @@ def prepare_input_prompts(
         user_prompt = get_task_instruction(question)
 
         prompt = [{"role": "user", "content": instruction + user_prompt}]
-        prompt = tokenizer.apply_chat_template(
-            prompt, tokenize=False, add_generation_prompt=True
-        )
+        prompt = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
         input_list.append(prompt)
 
     if subset_num != -1:
@@ -257,13 +234,7 @@ def replace_recent_steps(origin_str: str, replace_str: str) -> str:
     return new_reasoning_steps
 
 
-def save_checkpoint(
-    output_dir: str, 
-    rollout_id: int, 
-    turn: int, 
-    active_sequences: list, 
-    batch_output_records: list
-):
+def save_checkpoint(output_dir: str, rollout_id: int, turn: int, active_sequences: list, batch_output_records: list):
     # Convert sets to lists for JSON serialization
     serializable_sequences = []
     for seq in active_sequences:
@@ -271,14 +242,14 @@ def save_checkpoint(
         # Convert set to list for JSON serialization
         seq_copy["executed_search_queries"] = list(seq["executed_search_queries"])
         serializable_sequences.append(seq_copy)
-    
+
     # Save checkpoint data to a JSON file
     checkpoint_data = {
         "rollout_id": rollout_id,
         "turn": turn,
         "active_sequences": serializable_sequences,
         "batch_output_records": batch_output_records,
-        "timestamp": time.time()
+        "timestamp": time.time(),
     }
     checkpoint_path = os.path.join(output_dir, "checkpoint.json")
     with open(checkpoint_path, "w", encoding="utf-8") as f:
@@ -292,15 +263,14 @@ def load_checkpoint(output_dir: str) -> dict | None:
     if os.path.exists(checkpoint_path):
         with open(checkpoint_path, "r", encoding="utf-8") as f:
             checkpoint_data = json.load(f)
-        
+
         # Convert lists back to sets after loading
         for seq in checkpoint_data["active_sequences"]:
             seq["executed_search_queries"] = set(seq["executed_search_queries"])
-        
+
         print(f"Checkpoint loaded: {checkpoint_path}")
         return checkpoint_data
     return None
-
 
 
 def find_last_rollout(output_dir_base: str, dataset_name: str) -> int:
@@ -308,11 +278,11 @@ def find_last_rollout(output_dir_base: str, dataset_name: str) -> int:
     dataset_dir = os.path.join(output_dir_base, dataset_name)
     if not os.path.exists(dataset_dir):
         return -1
-    
+
     rollout_dirs = [d for d in os.listdir(dataset_dir) if d.startswith("rollout_")]
     if not rollout_dirs:
         return -1
-    
+
     rollout_numbers = [int(d.split("_")[1]) for d in rollout_dirs]
     return max(rollout_numbers)
 
@@ -335,7 +305,7 @@ def main(args: argparse.Namespace):
     print(f"CUDA_VISIBLE_DEVICES is set to: {os.environ['CUDA_VISIBLE_DEVICES']}")
 
     dataset_name = data_path.split("/")[-1].split(".")[0]
-    
+
     print("-----------------------")
     print(f"Using {dataset_name} set.")
     print("-----------------------")
@@ -354,18 +324,18 @@ def main(args: argparse.Namespace):
     # load last rollout
     last_rollout = find_last_rollout(output_dir_base, dataset_name)
 
-    is_rollout_initialized = False # True if the initialization when starting the rollout is done
+    is_rollout_initialized = False  # True if the initialization when starting the rollout is done
 
     if args.auto_resume and last_rollout >= 0:
         rollout_id = last_rollout
         output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
         checkpoint = load_checkpoint(output_dir)
-        
+
         assert rollout_num > rollout_id, (
             f"rollout_num ({rollout_num}) must be greater than current rollout_id ({rollout_id}) "
             f"when using auto_resume. Current rollout: {rollout_id}, Target rollouts: {rollout_num}"
         )
-        
+
         if checkpoint:
             print(f"Resuming from rollout {rollout_id}, turn {checkpoint['turn']}")
             # restore state from checkpoint
@@ -380,19 +350,13 @@ def main(args: argparse.Namespace):
     else:
         rollout_id = 0
 
-
     # Rollout
     while rollout_id < rollout_num:
-        print(
-            f"\n===================Rollout {rollout_id + 1} of {rollout_num}==================="
-        )
+        print(f"\n===================Rollout {rollout_id + 1} of {rollout_num}===================")
 
         if not is_rollout_initialized:
             active_sequences, input_list = prepare_input_prompts(
-                load_data(data_path),
-                max_search_limit,
-                tokenizer,
-                subset_num,
+                load_data(data_path), max_search_limit, tokenizer, subset_num
             )
             batch_output_records = []
             start_turn = 0
@@ -400,7 +364,7 @@ def main(args: argparse.Namespace):
             filtered_data = load_data(data_path)
 
         is_rollout_initialized = False
-        
+
         # Initialize collection structure
         start_time = time.time()
         turn = start_turn
@@ -408,25 +372,15 @@ def main(args: argparse.Namespace):
 
         # Start the interaction loop
         while turn < max_turn and unfinished:
-            sequences_needing_generation = [
-                seq for seq in active_sequences if not seq["finished"]
-            ]
+            sequences_needing_generation = [seq for seq in active_sequences if not seq["finished"]]
 
             if sequences_needing_generation:
                 turn += 1
                 print(f"\n-------------- Turn {turn} --------------")
-                print(
-                    f"We have {len(sequences_needing_generation)} sequences needing generation..."
-                )
+                print(f"We have {len(sequences_needing_generation)} sequences needing generation...")
 
                 outputs = run_generation(
-                    sequences_needing_generation,
-                    max_tokens,
-                    temperature,
-                    top_p,
-                    top_k_sampling,
-                    llm,
-                    tokenizer,
+                    sequences_needing_generation, max_tokens, temperature, top_p, top_k_sampling, llm, tokenizer
                 )
                 print("Generation completed, processing outputs...")
 
@@ -447,14 +401,10 @@ def main(args: argparse.Namespace):
                     seq["all_info"].append({f"turn_{turn}_reason": text})
 
                     # Extract search query
-                    search_query = extract_between(
-                        text, BEGIN_SEARCH_QUERY, END_SEARCH_QUERY
-                    )
+                    search_query = extract_between(text, BEGIN_SEARCH_QUERY, END_SEARCH_QUERY)
 
                     # If a search query is present and the needs to be executed
-                    if search_query and seq["output"].rstrip().endswith(
-                        END_SEARCH_QUERY
-                    ):
+                    if search_query and seq["output"].rstrip().endswith(END_SEARCH_QUERY):
                         if (
                             seq["search_count"] < max_search_limit
                             and search_query not in seq["executed_search_queries"]
@@ -462,22 +412,16 @@ def main(args: argparse.Namespace):
                             try:
                                 print(f'Executing search for query: "{search_query}"')
                                 search_results = retriever(search_query)
-                                rerankered_results, _ = reranker(
-                                    search_query, search_results
-                                )
+                                rerankered_results, _ = reranker(search_query, search_results)
                             except Exception as e:
                                 print(f'Search failed for query "{search_query}": {e}')
                                 search_results = []
                                 rerankered_results = []
-                            relevant_info = extract_relevant_info(
-                                rerankered_results[:top_k]
-                            )
+                            relevant_info = extract_relevant_info(rerankered_results[:top_k])
                             seq["relevant_info"] = relevant_info
 
                             all_reasoning_steps = seq["output"]
-                            all_reasoning_steps = all_reasoning_steps.replace(
-                                "\n\n", "\n"
-                            ).split("\n")
+                            all_reasoning_steps = all_reasoning_steps.replace("\n\n", "\n").split("\n")
 
                             truncated_prev_reasoning = ""
                             for i, step in enumerate(all_reasoning_steps):
@@ -497,16 +441,9 @@ def main(args: argparse.Namespace):
                                     ):
                                         truncated_prev_reasoning += step + "\n\n"
                                     else:
-                                        if (
-                                            truncated_prev_reasoning[
-                                                -len("\n\n...\n\n") :
-                                            ]
-                                            != "\n\n...\n\n"
-                                        ):
+                                        if truncated_prev_reasoning[-len("\n\n...\n\n") :] != "\n\n...\n\n":
                                             truncated_prev_reasoning += "...\n\n"
-                            truncated_prev_reasoning = truncated_prev_reasoning.strip(
-                                "\n"
-                            )
+                            truncated_prev_reasoning = truncated_prev_reasoning.strip("\n")
 
                             # Collect parameters for batch processing
                             batch_relevant_info.append(relevant_info)
@@ -524,9 +461,7 @@ def main(args: argparse.Namespace):
                             seq["prompt"] += limit_message
                             seq["output"] += limit_message
                             seq["history"].append(limit_message)
-                            seq["all_info"].append(
-                                {f"turn_{turn}_search_limited": limit_message}
-                            )
+                            seq["all_info"].append({f"turn_{turn}_search_limited": limit_message})
                             print(f'Search limit reached for query: "{search_query}"')
 
                         elif search_query in seq["executed_search_queries"]:
@@ -534,9 +469,7 @@ def main(args: argparse.Namespace):
                             seq["prompt"] += limit_message
                             seq["output"] += limit_message
                             seq["history"].append(limit_message)
-                            seq["all_info"].append(
-                                {f"turn_{turn}_search_limited": limit_message}
-                            )
+                            seq["all_info"].append({f"turn_{turn}_search_limited": limit_message})
                             print(f'Repeated search for query: "{search_query}"')
                     else:
                         # If no search query needs to be executed, mark the sequence as finished
@@ -549,9 +482,7 @@ def main(args: argparse.Namespace):
                     formatted_documents = ""
                     for i, doc_info in enumerate(relevant_info):
                         formatted_documents += f"**Web Page {i + 1}:**\n"
-                        formatted_documents += (
-                            json.dumps(doc_info, ensure_ascii=False, indent=2) + "\n"
-                        )
+                        formatted_documents += json.dumps(doc_info, ensure_ascii=False, indent=2) + "\n"
                     print(f"formatted_webpage_documents: {len(formatted_documents)}")
                     batch_documents.append(formatted_documents)
 
@@ -568,23 +499,16 @@ def main(args: argparse.Namespace):
                         batch_output_records=batch_output_records,  # Pass the collection list
                         llm=llm,
                     )
-                    print(
-                        "Batch generation completed, assigning outputs to sequences..."
-                    )
+                    print("Batch generation completed, assigning outputs to sequences...")
 
-                    for seq, analysis, doc in zip(
-                        batch_sequences, webpage_analyses, batch_documents
-                    ):
+                    for seq, analysis, doc in zip(batch_sequences, webpage_analyses, batch_documents):
                         if isinstance(analysis, str):
                             append_text = f"\n\n{BEGIN_SEARCH_RESULT}{analysis}{END_SEARCH_RESULT}\n\n"
                             seq["prompt"] += append_text
                             seq["output"] += append_text
                             seq["history"].append(append_text)
                             seq["all_info"].extend(
-                                [
-                                    {f"turn_{turn}_search": doc},
-                                    {f"turn_{turn}_webpage_analyses": analysis},
-                                ]
+                                [{f"turn_{turn}_search": doc}, {f"turn_{turn}_webpage_analyses": analysis}]
                             )
                         else:
                             append_text = replace_recent_steps(seq["output"], analysis)
@@ -592,10 +516,7 @@ def main(args: argparse.Namespace):
                             seq["output"] += append_text
                             seq["history"].append(append_text)
                             seq["all_info"].extend(
-                                [
-                                    {f"turn_{turn}_search": doc},
-                                    {f"turn_{turn}_webpage_analyses": analysis},
-                                ]
+                                [{f"turn_{turn}_search": doc}, {f"turn_{turn}_webpage_analyses": analysis}]
                             )
 
             # Check if all sequences are finished
@@ -611,11 +532,9 @@ def main(args: argparse.Namespace):
                 }
                 for ele in active_sequences
             ]
-            with open(
-                os.path.join(output_dir, f"turn_{turn}.json"), "w", encoding="utf-8"
-            ) as f:
+            with open(os.path.join(output_dir, f"turn_{turn}.json"), "w", encoding="utf-8") as f:
                 json.dump(active_sequences_part, f, ensure_ascii=False, indent=2)
-            
+
             save_checkpoint(output_dir, rollout_id, turn, active_sequences, batch_output_records)
             unfinished = [seq for seq in active_sequences if not seq["finished"]]
 
@@ -626,8 +545,7 @@ def main(args: argparse.Namespace):
         # Define output JSON file path
         t = time.localtime()
         batch_output_file = os.path.join(
-            output_dir,
-            f"test.{t.tm_mon}.{t.tm_mday},{t.tm_hour}:{t.tm_min}.info_extract.json",
+            output_dir, f"test.{t.tm_mon}.{t.tm_mday},{t.tm_hour}:{t.tm_min}.info_extract.json"
         )
 
         # Save batch_output_records to JSON file
@@ -648,107 +566,62 @@ def main(args: argparse.Namespace):
         # ---------------------- Stage-wise Analysis ----------------------
         turn_files = os.listdir(output_dir)
         turn_files = [file for file in turn_files if file.startswith("turn_")]
-        max_turn_file = max(
-            turn_files, key=lambda x: int(re.search(r"turn_(\d+)", x).group(1))
-        )
+        max_turn_file = max(turn_files, key=lambda x: int(re.search(r"turn_(\d+)", x).group(1)))
 
         max_turn_file_path = os.path.join(output_dir, max_turn_file)
         print(f"max_turn_file_path: {max_turn_file_path}")
         stage_wise_analysis(model_path, max_turn_file_path)
-        
+
         checkpoint_path = os.path.join(output_dir, "checkpoint.json")
         if os.path.exists(checkpoint_path):
             os.remove(checkpoint_path)
             print(f"Checkpoint removed: {checkpoint_path}")
-        
+
         rollout_id += 1
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Run SimpleDeepsearcer for various datasets."
-    )
+    parser = argparse.ArgumentParser(description="Run SimpleDeepsearcer for various datasets.")
+
+    parser.add_argument("--data_path", type=str, required=True, help="Path to the dataset to use.")
 
     parser.add_argument(
-        "--data_path", type=str, required=True, help="Path to the dataset to use."
-    )
-
-    parser.add_argument(
-        "--subset_num",
-        type=int,
-        default=-1,
-        help="Number of examples to process. Defaults to all if not specified.",
+        "--subset_num", type=int, default=-1, help="Number of examples to process. Defaults to all if not specified."
     )
 
     # Search and document retrieval configuration
-    parser.add_argument(
-        "--max_search_limit",
-        type=int,
-        default=10,
-        help="Maximum number of searches per question.",
-    )
+    parser.add_argument("--max_search_limit", type=int, default=10, help="Maximum number of searches per question.")
 
-    parser.add_argument(
-        "--max_turn", type=int, default=15, help="Maximum number of turns."
-    )
+    parser.add_argument("--max_turn", type=int, default=15, help="Maximum number of turns.")
 
-    parser.add_argument(
-        "--top_k",
-        type=int,
-        default=10,
-        help="Maximum number of search documents to return.",
-    )
+    parser.add_argument("--top_k", type=int, default=10, help="Maximum number of search documents to return.")
 
-    parser.add_argument(
-        "--max_doc_len",
-        type=int,
-        default=3000,
-        help="Maximum length of each searched document.",
-    )
+    parser.add_argument("--max_doc_len", type=int, default=3000, help="Maximum length of each searched document.")
 
     # Model configuration
-    parser.add_argument(
-        "--model_path", type=str, required=True, help="Path to the reasoning model."
-    )
+    parser.add_argument("--model_path", type=str, required=True, help="Path to the reasoning model.")
 
     # Sampling parameters
-    parser.add_argument(
-        "--temperature", type=float, default=0.6, help="Sampling temperature."
-    )
+    parser.add_argument("--temperature", type=float, default=0.6, help="Sampling temperature.")
 
-    parser.add_argument(
-        "--top_p", type=float, default=0.95, help="Top-p sampling parameter."
-    )
+    parser.add_argument("--top_p", type=float, default=0.95, help="Top-p sampling parameter.")
 
-    parser.add_argument(
-        "--top_k_sampling", type=int, default=40, help="Top-k sampling parameter."
-    )
+    parser.add_argument("--top_k_sampling", type=int, default=40, help="Top-k sampling parameter.")
 
-    parser.add_argument(
-        "--max_tokens",
-        type=int,
-        default=20480,
-        help="Maximum number of tokens to generate.",
-    )
+    parser.add_argument("--max_tokens", type=int, default=20480, help="Maximum number of tokens to generate.")
 
     parser.add_argument("--cache_dir_base", type=str, required=True, help="cache path.")
 
     parser.add_argument("--output_dir_base", type=str, required=True, help="output_dir")
 
-    parser.add_argument(
-        "--is_exclude_urls", action="store_true", help="is_exclude_urls"
-    )
+    parser.add_argument("--is_exclude_urls", action="store_true", help="is_exclude_urls")
+
+    parser.add_argument("--rollout_num", type=int, default=1, help="The number of rollout per question")
 
     parser.add_argument(
-        "--rollout_num", type=int, default=1, help="The number of rollout per question"
+        "--auto_resume", action="store_true", help="Automatically resume from the last checkpoint if available"
     )
 
-    parser.add_argument(
-        "--auto_resume", 
-        action="store_true", 
-        help="Automatically resume from the last checkpoint if available"
-    )    
-    
     args = parser.parse_args()
 
     main(args)

@@ -10,9 +10,7 @@ from vllm.sampling_params import GuidedDecodingParams
 import torch
 
 
-
 def create_kpr_prompt(key_point, answer):
-
     return f"""You are given a **single key point** and a **report**.
 
     Your job is to determine whether the report:
@@ -44,9 +42,9 @@ def create_eval_criterion_prompt(eval_criteria, question, answer):
         "Balance": "Evaluate the fairness and objectivity of the answer. Excellent reports present multiple perspectives fairly and impartially, especially for controversial or multi-faceted topics. Poor reports show clear bias, favor one side without justification, or ignore opposing views.",
         "Breadth": "Evaluate how many distinct and relevant subtopics, perspectives, or contexts are covered. Excellent reports provide a wide-ranging yet focused exploration — e.g., including legal, historical, cultural, or ethical angles where appropriate. Simply presenting both sides of a binary debate is not sufficient for a high score.",
         "Support": "Evaluate the extent to which all key claims are substantiated by specific, identifiable, and credible evidence.  \n\nProviding URLs in the report is the most basic requirement. If no section (such as references or sources) provides source URLs, the score should be zero.\n\nHaving URLs only meets the minimum standard and does not merit a high score. Evaluation must be carried out strictly according to the following principles; any deficiencies should prevent a score above 8.\n\nFactual accuracy is necessary but not remotely sufficient. The following are strict, non-negotiable expectations for higher scores:\n- Every factual claim must be attributed to a verifiable source (e.g., peer-reviewed articles, government databases, reputable news organizations). Vague references (e.g., “studies show,” “experts believe”) are unacceptable.\n- Quantitative claims require precise, contextualized data, ideally with comparative benchmarks (e.g., trends over time, regional differences).\n- Qualitative claims must be supported by concrete examples, not hypotheticals or generalizations. Examples should be relevant, compelling, and clearly linked to the argument.\n- Sources must be cited explicitly and be traceable. If the source is not easily verifiable (e.g., no publication, no author, no URL), it is considered invalid.\n- Cherry-picked or misleading evidence will result in a score reduction, regardless of citation. Omission of counter-evidence where clearly relevant is penalized.\n- Original analysis or synthesis must be built on top of sourced material, not used as a substitute for it.",
-        "Insightfulness": "Assess how insightful the answer is. Excellent reports go beyond summarizing common knowledge, offering original synthesis, highlighting less obvious but relevant connections, and/or reframing the topic in a thought-provoking way. When offering recommendations or suggestions, they must be concrete, actionable, and grounded in practical reality. Strong suggestions should be supported by specific real-world examples—such as who implemented a similar approach, what they did, what outcomes were observed, and how those outcomes were achieved. Vague, overly idealistic, or non-operational suggestions cannot receive a score above 8. Practical applicability is paramount."
+        "Insightfulness": "Assess how insightful the answer is. Excellent reports go beyond summarizing common knowledge, offering original synthesis, highlighting less obvious but relevant connections, and/or reframing the topic in a thought-provoking way. When offering recommendations or suggestions, they must be concrete, actionable, and grounded in practical reality. Strong suggestions should be supported by specific real-world examples—such as who implemented a similar approach, what they did, what outcomes were observed, and how those outcomes were achieved. Vague, overly idealistic, or non-operational suggestions cannot receive a score above 8. Practical applicability is paramount.",
     }
-    
+
     return f"""You are a strict and harsh expert evaluator assessing the quality of an answer to a complex question.
 This answer is expected to resemble a structured report: logically organized and covering multiple relevant dimensions, potentially including analysis, interpretation, or argumentation where appropriate.
 
@@ -76,11 +74,10 @@ Do not output any other information.
 
 
 def extract_final_answer(answer: str) -> str:
-
-    pattern = r'\\boxed\{\\text{(.*?)\}\}'
+    pattern = r"\\boxed\{\\text{(.*?)\}\}"
     match = re.search(pattern, answer, re.DOTALL)
-    
-    pattern_unnested = r'\\boxed\{(.*?)\}'
+
+    pattern_unnested = r"\\boxed\{(.*?)\}"
     match_unnested = re.findall(pattern_unnested, answer, re.DOTALL)
 
     if match:
@@ -91,14 +88,12 @@ def extract_final_answer(answer: str) -> str:
         # If no match is found, return an empty string
         # it might be reasoning limit
         print("No final answer found in the expected format.")
-        
+
         return ""
 
+
 def create_chat_pattern(prompt: str):
-    chat_pattern = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": prompt}
-    ]
+    chat_pattern = [{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": prompt}]
     return chat_pattern
 
 
@@ -111,6 +106,7 @@ class CriterionEvaluation(BaseModel):
     rating: Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     justification: str
 
+
 def evaluate_with_llm_judge(
     messages: List[List[Dict]],
     schema_class: Any,
@@ -119,21 +115,11 @@ def evaluate_with_llm_judge(
     max_tokens: int = 512,
     default_json: Dict = None,
 ) -> List[Dict]:
-    
-    guided_params = GuidedDecodingParams(
-        json=schema_class.model_json_schema()
-    )
-    sampling_params = SamplingParams(
-        temperature=temperature,
-        max_tokens=max_tokens,
-        guided_decoding=guided_params,
-    )
-    outputs = llm.chat(
-        messages,
-        sampling_params=sampling_params,
-    )
+    guided_params = GuidedDecodingParams(json=schema_class.model_json_schema())
+    sampling_params = SamplingParams(temperature=temperature, max_tokens=max_tokens, guided_decoding=guided_params)
+    outputs = llm.chat(messages, sampling_params=sampling_params)
     # judges = [json.loads(output.outputs[0].text) for output in outputs]
-    
+
     judges = []
     error_count = 0
     for output in outputs:
@@ -141,36 +127,33 @@ def evaluate_with_llm_judge(
             parsed_json = json.loads(output.outputs[0].text)
             judges.append(parsed_json)
         except json.JSONDecodeError:
-            
-            if not output.outputs[0].text.endswith('}'):
+            if not output.outputs[0].text.endswith("}"):
                 if not output.outputs[0].text.rstrip().endswith('"'):
                     output.outputs[0].text = output.outputs[0].text.rstrip() + '"'
-            fixed_text = output.outputs[0].text + '}'
-            
+            fixed_text = output.outputs[0].text + "}"
+
             try:
                 parsed_json = json.loads(fixed_text)
                 judges.append(parsed_json)
             except (json.JSONDecodeError, Exception) as e:
                 judges.append(default_json)
-                error_count += 1  
-    
+                error_count += 1
+
     if error_count > 0:
         print(f"Total JSON parse errors: {error_count}")
-        
+
     return judges
 
 
-def evaluate_kpr(
-    key_points_collection: list, 
-    answers: list,
-    llm: LLM = None,
-):
+def evaluate_kpr(key_points_collection: list, answers: list, llm: LLM = None):
     key_point_answer_pairs = []
     for kp_group_id, (key_points, answer) in enumerate(zip(key_points_collection, answers)):
         for key_point in key_points:
             key_point_answer_pairs.append((kp_group_id, key_point, answer))
 
-    prompts = [create_kpr_prompt(key_point["point_content"], answer) for _, key_point, answer in key_point_answer_pairs]
+    prompts = [
+        create_kpr_prompt(key_point["point_content"], answer) for _, key_point, answer in key_point_answer_pairs
+    ]
     messages = [create_chat_pattern(prompt) for prompt in prompts]
 
     # llm-as-a-judge with structured output
@@ -180,9 +163,9 @@ def evaluate_kpr(
         llm,
         temperature=0,
         max_tokens=512,
-        default_json={"label": "error", "justification": "json parse error"}
+        default_json={"label": "error", "justification": "json parse error"},
     )
-    
+
     # reconstruct the results
     kpr_results = []
     for _ in range(len(key_points_collection)):
@@ -209,18 +192,16 @@ def evaluate_kpr(
     return kpr_results
 
 
-def evaluate_criteria(
-    questions: List[str],
-    answers: List[str],
-    eval_criteria: List[str],
-    llm: LLM = None,
-):
+def evaluate_criteria(questions: List[str], answers: List[str], eval_criteria: List[str], llm: LLM = None):
     criterion_answer_pairs = []
     for qa_group_id, (question, answer) in enumerate(zip(questions, answers)):
         for criterion in eval_criteria:
             criterion_answer_pairs.append((qa_group_id, criterion, question, answer))
 
-    prompts = [create_eval_criterion_prompt(criterion, question, answer) for _, criterion, question, answer in criterion_answer_pairs]
+    prompts = [
+        create_eval_criterion_prompt(criterion, question, answer)
+        for _, criterion, question, answer in criterion_answer_pairs
+    ]
     messages = [create_chat_pattern(prompt) for prompt in prompts]
 
     # llm-as-a-judge with structured output
@@ -230,7 +211,7 @@ def evaluate_criteria(
         llm,
         temperature=0,
         max_tokens=512,
-        default_json={"rating": -1, "justification": "json parse error"}
+        default_json={"rating": -1, "justification": "json parse error"},
     )
 
     # reconstruct the results
@@ -244,13 +225,11 @@ def evaluate_criteria(
     return eval_criteria_results
 
 
-
 def evaluate_response_quality(
     input_data: dict,
     model_path: str = "Qwen/Qwen3-30B-A3B-Thinking-2507",
-    eval_criteria: List[str] = ["Clarity", "Insightfulness"]
+    eval_criteria: List[str] = ["Clarity", "Insightfulness"],
 ):
-    
     llm = LLM(
         model=model_path,
         guided_decoding_backend="xgrammar",
@@ -262,7 +241,7 @@ def evaluate_response_quality(
     flat_questions = []
     flat_final_answers = []
     flat_key_points_collection = []
-    reconstruction_map = [] # (query, rollout_idx)
+    reconstruction_map = []  # (query, rollout_idx)
     for query, rollouts in input_data.items():
         for rollout_idx, rollout in enumerate(rollouts):
             flat_questions.append(query)
@@ -272,20 +251,11 @@ def evaluate_response_quality(
 
     # evaluate KPR
     print("Evaluating Key Point Recall (KPR)...")
-    eval_kpr_results = evaluate_kpr(
-        flat_key_points_collection, 
-        flat_final_answers, 
-        llm=llm
-    )
+    eval_kpr_results = evaluate_kpr(flat_key_points_collection, flat_final_answers, llm=llm)
 
     # evaluate clarity and insightfulness
     print(f"Evaluating Criteria ...")
-    eval_criteria_results = evaluate_criteria(
-        flat_questions,
-        flat_final_answers,
-        eval_criteria,
-        llm=llm
-    )
+    eval_criteria_results = evaluate_criteria(flat_questions, flat_final_answers, eval_criteria, llm=llm)
 
     # reconstruct the results and add quality metrics
     results = {}
@@ -299,7 +269,7 @@ def evaluate_response_quality(
         results[query][rollout_idx] = original_rollout.copy()
         results[query][rollout_idx]["kpr"] = eval_kpr_results[i]
         results[query][rollout_idx]["criteria_evaluation"] = eval_criteria_results[i]
-    
+
     # with open("test_reasoning_quality_evaluation_1sample.json", "w", encoding="utf-8") as f:
     #     json.dump(results, f, indent=2, ensure_ascii=False)
 
@@ -310,12 +280,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_file")
     args = parser.parse_args()
-    
+
     with open(args.input_file, "r", encoding="utf-8") as f:
         input_data = json.load(f)
 
     evaluate_response_quality(
         input_data=input_data,
         model_path="Qwen/Qwen3-30B-A3B-Thinking-2507",
-        eval_criteria=["Clarity", "Insightfulness"]
+        eval_criteria=["Clarity", "Insightfulness"],
     )
