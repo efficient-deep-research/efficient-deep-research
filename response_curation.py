@@ -1,5 +1,6 @@
 import copy
 import os
+import asyncio
 import json
 from collections import defaultdict
 import re
@@ -11,7 +12,7 @@ import argparse
 
 from utils.response_format_validators import detect_repeat, detect_variant_markers, is_valid_history
 
-from utils.response_quarity_evaluators import evaluate_response_quality, extract_final_answer
+from utils.response_quarity_evaluators import evaluate_response_quality_async, extract_final_answer
 
 
 def plot_distribution(
@@ -335,10 +336,13 @@ if __name__ == "__main__":
     parser.add_argument("--root_path", type=str, required=True, help="Path to the directory containing question data.")
     parser.add_argument("--k", type=int, default=100000, help="Number of top valid data to retain.")
     parser.add_argument(
-        "--model_path",
+        "--model",
         type=str,
-        default="Qwen/Qwen3-30B-A3B-Thinking-2507",
-        help="Path to the LLM model for response quality evaluation.",
+        default="o3-mini",
+        help="OpenAI model to use for evaluation (e.g., 'o3-mini', 'gpt-4o-mini').",
+    )
+    parser.add_argument(
+        "--max_concurrent", type=int, default=100, help="Maximum concurrent API requests"
     )
     parser.add_argument(
         "--output_path", type=str, required=True, help="Path to the directory to save the selected data."
@@ -358,11 +362,22 @@ if __name__ == "__main__":
     print("Merge question-answer pairs...")
     result = merge_questions(root_path)
     print(f"len of all question-answer pairs: {len(result)}")
+    
+    # debug
+    with open(intermediate_results_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=4)
+    print(f"Saving intermediate results to {intermediate_results_path}")
+    breakpoint()
 
     # add KPR and evaluate response quality based on eval_criteria
     print("Evaluate response quality...")
     eval_criteria = ["Clarity", "Insightfulness"]
-    result = evaluate_response_quality(result, model_path=args.model_path, eval_criteria=eval_criteria)
+    result = asyncio.run(evaluate_response_quality_async(
+        input_data=result,
+        model=args.model,
+        eval_criteria=eval_criteria,
+        max_concurrent_requests=args.max_concurrent
+    ))
     with open(intermediate_results_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=4)
     print(f"Saving intermediate results to {intermediate_results_path}")
