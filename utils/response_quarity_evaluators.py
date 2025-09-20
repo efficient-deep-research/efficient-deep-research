@@ -203,10 +203,10 @@ async def evaluate_kpr_async(
             continue
         
         total_points = len(labels)
-        supported_count = sum(1 for label in labels if label["label"] == "Supported")
-        omitted_count = sum(1 for label in labels if label["label"] == "Omitted")
-        contradicted_count = sum(1 for label in labels if label["label"] == "Contradicted")
-        
+        supported_count = sum(1 for label in labels if label.get("label") == "Supported")
+        omitted_count = sum(1 for label in labels if label.get("label") == "Omitted")
+        contradicted_count = sum(1 for label in labels if label.get("label") == "Contradicted")
+
         result["supported_rate"] = supported_count / total_points * 100
         result["omitted_rate"] = omitted_count / total_points * 100
         result["contradicted_rate"] = contradicted_count / total_points * 100
@@ -271,12 +271,12 @@ async def evaluate_response_quality_async(
             reconstruction_map.append((query, rollout_idx))
     
     # Evaluate KPR and criteria concurrently
-    # kpr_task = evaluate_kpr_async(flat_key_points_collection, flat_final_answers, client, model, semaphore)
+    kpr_task = evaluate_kpr_async(flat_key_points_collection, flat_final_answers, client, model, semaphore)
     criteria_task = evaluate_criteria_async(flat_questions, flat_final_answers, eval_criteria, client, model, semaphore)
 
-    # eval_kpr_results, eval_criteria_results = await asyncio.gather(kpr_task, criteria_task)
-    eval_criteria_results = await asyncio.gather(criteria_task)
-    
+    eval_kpr_results, eval_criteria_results = await asyncio.gather(kpr_task, criteria_task)
+    # eval_criteria_results = await asyncio.gather(criteria_task)
+
     # Reconstruct the results
     results = {}
     for i, (query, rollout_idx) in enumerate(reconstruction_map):
@@ -287,7 +287,7 @@ async def evaluate_response_quality_async(
         
         original_rollout = input_data[query][rollout_idx]
         results[query][rollout_idx] = original_rollout.copy()
-        # results[query][rollout_idx]["kpr"] = eval_kpr_results[i]
+        results[query][rollout_idx]["kpr"] = eval_kpr_results[i]
         results[query][rollout_idx]["criteria_evaluation"] = eval_criteria_results[i]
     
     return results
@@ -299,7 +299,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", default="o3-mini", help="OpenAI model to use")
     parser.add_argument("--eval_criteria", nargs="+", default=["Clarity", "Insightfulness"], 
                        help="Evaluation criteria to use")
-    parser.add_argument("--max_concurrent", type=int, default=100, 
+    parser.add_argument("--max_concurrent", type=int, default=10, 
                        help="Maximum concurrent API requests")
     args = parser.parse_args()
 

@@ -16,6 +16,7 @@ def get_qa_instruction(MAX_SEARCH_LIMIT: int) -> str:
 def get_task_instruction(question: str) -> str:
     user_prompt = (
         "Please answer the following question. You should think step by step to solve it.\n\n"
+        "Your answer should be clear, detailed, and insightful, and written in 50–100 words."
         "Provide your final answer in the format \\boxed{YOUR_ANSWER}.\n\n"
         f"Question:\n{question}\n\n"
     )

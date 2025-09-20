@@ -362,12 +362,6 @@ if __name__ == "__main__":
     print("Merge question-answer pairs...")
     result = merge_questions(root_path)
     print(f"len of all question-answer pairs: {len(result)}")
-    
-    # debug
-    with open(intermediate_results_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False, indent=4)
-    print(f"Saving intermediate results to {intermediate_results_path}")
-    breakpoint()
 
     # add KPR and evaluate response quality based on eval_criteria
     print("Evaluate response quality...")
