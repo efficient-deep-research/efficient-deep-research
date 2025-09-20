@@ -8,3 +8,22 @@ wheels/
 
 # Virtual environments
 .venv
+
+# dataset directories
+sampled_data/
+
+# PNG files
+*.png
+
+# source files for development
+synthesis_src/
+
+# large data
+synthesized_sft_data/curated_dataset/deepresearchgym
+synthesized_sft_data/output/deepresearchgym
+synthesized_sft_data/output/failed_deepresearchgym
+synthesized_sft_data/curated_dataset/deepresearchgym
+original_datasets/deepresearchgym
+
+# job script
+job.sh

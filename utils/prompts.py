@@ -16,15 +16,14 @@ def get_qa_instruction(MAX_SEARCH_LIMIT: int) -> str:
 def get_task_instruction(question: str) -> str:
     user_prompt = (
         "Please answer the following question. You should think step by step to solve it.\n\n"
+        "Your answer should be clear, detailed, and insightful, and written in 50–100 words."
         "Provide your final answer in the format \\boxed{YOUR_ANSWER}.\n\n"
         f"Question:\n{question}\n\n"
     )
     return user_prompt
 
 
-def get_webpage_to_reasonchain_instruction(
-    prev_reasoning: str, search_query: str, document: str
-) -> str:
+def get_webpage_to_reasonchain_instruction(prev_reasoning: str, search_query: str, document: str) -> str:
     return f"""**Task Instruction:**
 
 You are tasked with reading and analyzing web pages based on the following inputs: **Previous Reasoning Steps**, **Current Search Query**, and **Searched Web Pages**. Your objective is to extract relevant and helpful information for **Current Search Query** from the **Searched Web Pages** and seamlessly integrate this information into the **Previous Reasoning Steps** to continue reasoning for the original question.
