@@ -109,90 +109,63 @@ class CriterionEvaluation(BaseModel):
 
 
 async def evaluate_with_openai_judge(
-    semaphore: asyncio.Semaphore,
-    prompt: str,
-    schema_class: Any,
-    client: AsyncOpenAI,
-    model: str
+    semaphore: asyncio.Semaphore, prompt: str, schema_class: Any, client: AsyncOpenAI, model: str
 ) -> Dict:
     async with semaphore:
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": prompt}
-        ]
-        
+        messages = [{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": prompt}]
+
         try:
             response = await client.beta.chat.completions.parse(
-                model=model,
-                messages=messages,
-                response_format=schema_class
+                model=model, messages=messages, response_format=schema_class
             )
             return response.choices[0].message.parsed.model_dump()
         except Exception as e:
             print(f"Error in OpenAI API call: {e}")
             return {}
 
+
 async def evaluate_single_key_point(
-    semaphore: asyncio.Semaphore,
-    key_point: Dict,
-    answer: str,
-    client: AsyncOpenAI,
-    model: str
+    semaphore: asyncio.Semaphore, key_point: Dict, answer: str, client: AsyncOpenAI, model: str
 ) -> Dict:
     prompt = create_kpr_prompt(key_point["point_content"], answer)
-    return await evaluate_with_openai_judge(
-        semaphore,
-        prompt,
-        KeyPointRecall,
-        client,
-        model
-    )
+    return await evaluate_with_openai_judge(semaphore, prompt, KeyPointRecall, client, model)
+
 
 async def evaluate_single_criterion(
-    semaphore: asyncio.Semaphore,
-    criterion: str,
-    question: str,
-    answer: str,
-    client: AsyncOpenAI,
-    model: str
+    semaphore: asyncio.Semaphore, criterion: str, question: str, answer: str, client: AsyncOpenAI, model: str
 ) -> Dict:
     prompt = create_eval_criterion_prompt(criterion, question, answer)
-    return await evaluate_with_openai_judge(
-        semaphore,
-        prompt,
-        CriterionEvaluation,
-        client,
-        model
-    )
+    return await evaluate_with_openai_judge(semaphore, prompt, CriterionEvaluation, client, model)
+
 
 async def evaluate_kpr_async(
     key_points_collection: List[List[Dict]],
     answers: List[str],
     client: AsyncOpenAI,
     model: str,
-    semaphore: asyncio.Semaphore
+    semaphore: asyncio.Semaphore,
 ) -> List[Dict]:
     # Prepare tasks for all key point evaluations
     tasks = []
     task_metadata = []  # (kp_group_id, key_point)
-    
+
     for kp_group_id, (key_points, answer) in enumerate(zip(key_points_collection, answers)):
         for key_point in key_points:
             tasks.append(evaluate_single_key_point(semaphore, key_point, answer, client, model))
             task_metadata.append((kp_group_id, key_point))
-    
+
     # Execute all tasks concurrently
     print("Evaluating Key Point Recall (KPR)...")
     judges = await tqdm_asyncio.gather(*tasks)
-    
+
     # Reconstruct results
     kpr_results = []
     for _ in range(len(key_points_collection)):
         kpr_results.append({"judges": {}, "supported_rate": 0.0, "omitted_rate": 0.0, "contradicted_rate": 0.0})
-    
+
     for i, (kp_group_id, key_point) in enumerate(task_metadata):
         kpr_results[kp_group_id]["judges"][key_point["point_number"]] = judges[i]
-    
+
     # Compute KPR rates
     for result in kpr_results:
         labels = list(result["judges"].values())
@@ -201,7 +174,7 @@ async def evaluate_kpr_async(
             result["omitted_rate"] = 0.0
             result["contradicted_rate"] = 0.0
             continue
-        
+
         total_points = len(labels)
         supported_count = sum(1 for label in labels if label.get("label") == "Supported")
         omitted_count = sum(1 for label in labels if label.get("label") == "Omitted")
@@ -210,8 +183,9 @@ async def evaluate_kpr_async(
         result["supported_rate"] = supported_count / total_points * 100
         result["omitted_rate"] = omitted_count / total_points * 100
         result["contradicted_rate"] = contradicted_count / total_points * 100
-    
+
     return kpr_results
+
 
 async def evaluate_criteria_async(
     questions: List[str],
@@ -219,60 +193,58 @@ async def evaluate_criteria_async(
     eval_criteria: List[str],
     client: AsyncOpenAI,
     model: str,
-    semaphore: asyncio.Semaphore
+    semaphore: asyncio.Semaphore,
 ) -> List[Dict]:
     # Prepare tasks for all criterion evaluations
     tasks = []
     task_metadata = []  # (qa_group_id, criterion)
-    
+
     for qa_group_id, (question, answer) in enumerate(zip(questions, answers)):
         for criterion in eval_criteria:
             tasks.append(evaluate_single_criterion(semaphore, criterion, question, answer, client, model))
             task_metadata.append((qa_group_id, criterion))
-    
+
     # Execute all tasks concurrently
     print(f"Evaluating Criteria: {eval_criteria}...")
     judges = await tqdm_asyncio.gather(*tasks)
-    
+
     # Reconstruct results
     eval_criteria_results = []
     for _ in range(len(questions)):
         eval_criteria_results.append({})
-    
+
     for i, (qa_group_id, criterion) in enumerate(task_metadata):
         eval_criteria_results[qa_group_id][criterion] = judges[i]
-    
+
     return eval_criteria_results
 
+
 async def evaluate_response_quality_async(
-    input_data: Dict,
-    model: str = None,
-    eval_criteria: List[str] = [],
-    max_concurrent_requests: int = 100
+    input_data: Dict, model: str = None, eval_criteria: List[str] = [], max_concurrent_requests: int = 100
 ):
-    
     client = client = AsyncOpenAI(
-        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-        base_url=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"), base_url=os.getenv("AZURE_OPENAI_ENDPOINT")
     )
     semaphore = asyncio.Semaphore(max_concurrent_requests)
-    
+
     # Flatten the input data
     flat_questions = []
     flat_final_answers = []
     flat_key_points_collection = []
     reconstruction_map = []  # (query, rollout_idx)
-    
+
     for query, rollouts in input_data.items():
         for rollout_idx, rollout in enumerate(rollouts):
             flat_questions.append(query)
             flat_final_answers.append(extract_final_answer(rollout["output"]))
             flat_key_points_collection.append(rollout["item"]["key_points"])
             reconstruction_map.append((query, rollout_idx))
-    
+
     # Evaluate KPR and criteria concurrently
     kpr_task = evaluate_kpr_async(flat_key_points_collection, flat_final_answers, client, model, semaphore)
-    criteria_task = evaluate_criteria_async(flat_questions, flat_final_answers, eval_criteria, client, model, semaphore)
+    criteria_task = evaluate_criteria_async(
+        flat_questions, flat_final_answers, eval_criteria, client, model, semaphore
+    )
 
     eval_kpr_results, eval_criteria_results = await asyncio.gather(kpr_task, criteria_task)
     # eval_criteria_results = await asyncio.gather(criteria_task)
@@ -284,12 +256,12 @@ async def evaluate_response_quality_async(
             results[query] = []
         while len(results[query]) <= rollout_idx:
             results[query].append({})
-        
+
         original_rollout = input_data[query][rollout_idx]
         results[query][rollout_idx] = original_rollout.copy()
         results[query][rollout_idx]["kpr"] = eval_kpr_results[i]
         results[query][rollout_idx]["criteria_evaluation"] = eval_criteria_results[i]
-    
+
     return results
 
 
@@ -297,10 +269,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_file", required=True, help="Path to input JSON file")
     parser.add_argument("--model", default="o3-mini", help="OpenAI model to use")
-    parser.add_argument("--eval_criteria", nargs="+", default=["Clarity", "Insightfulness"], 
-                       help="Evaluation criteria to use")
-    parser.add_argument("--max_concurrent", type=int, default=10, 
-                       help="Maximum concurrent API requests")
+    parser.add_argument(
+        "--eval_criteria", nargs="+", default=["Clarity", "Insightfulness"], help="Evaluation criteria to use"
+    )
+    parser.add_argument("--max_concurrent", type=int, default=10, help="Maximum concurrent API requests")
     args = parser.parse_args()
 
     with open(args.input_file, "r", encoding="utf-8") as f:
@@ -309,13 +281,15 @@ if __name__ == "__main__":
     print(f"Evaluating using model: {args.model}")
     print(f"Criteria: {args.eval_criteria}")
     print(f"Max concurrent requests: {args.max_concurrent}")
-    
-    results = asyncio.run(evaluate_response_quality_async(
-        input_data=input_data,
-        model=args.model,
-        eval_criteria=args.eval_criteria,
-        max_concurrent_requests=args.max_concurrent
-    ))
+
+    results = asyncio.run(
+        evaluate_response_quality_async(
+            input_data=input_data,
+            model=args.model,
+            eval_criteria=args.eval_criteria,
+            max_concurrent_requests=args.max_concurrent,
+        )
+    )
 
     with open("test_reasoning_quality_evaluation.json", "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
