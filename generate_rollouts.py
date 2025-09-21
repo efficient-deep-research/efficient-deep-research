@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import os
 import re
 import time
@@ -13,6 +14,9 @@ from utils import extract_between_tags, extract_final_information, load_tokenize
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
 from utils.prompts import get_qa_instruction, get_task_instruction, get_webpage_to_reasonchain_instruction
 from utils.stage_wise_analysis import stage_wise_analysis
+
+
+logger = logging.getLogger(__name__)
 
 
 def make_output_dir(output_dir_base: str, dataset_name: str, rollout_id: int) -> str:
@@ -513,12 +517,6 @@ def main(args: argparse.Namespace):
         # Prepare output list for evaluation
         output_list = [seq["output"] for seq in active_sequences]
 
-        # Run evaluation for factoid QAs
-        # if dataset_name in ["eval", "gaia"]:
-        #     run_evaluation_for_eval(filtered_data, input_list, output_list, dataset_name, output_dir, total_time, 'test')
-        # else:
-        #     run_evaluation(filtered_data, input_list, output_list, dataset_name, output_dir, total_time, 'test')
-
         # ---------------------- Stage-wise Analysis ----------------------
         turn_files = os.listdir(output_dir)
         turn_files = [file for file in turn_files if file.startswith("turn_")]
@@ -597,5 +595,7 @@ if __name__ == "__main__":
     parser.add_argument("--reranker_model_name", type=str, required=True, help="Reranker model name")
 
     args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO)
 
     main(args)
