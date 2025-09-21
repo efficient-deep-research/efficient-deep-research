@@ -6,14 +6,14 @@ import re
 import time
 
 from transformers import AutoTokenizer
-from vllm import LLM, SamplingParams
 
 from search.rerankers import ContextualAIReranker, JinaReranker, Qwen3Reranker
 from search.retrievers import ClueWeb22Retriever, FineWebRetriever
-from utils import extract_between_tags, extract_final_information, load_tokenizer, load_vllm_model, run_generation
+from utils import extract_between_tags, load_tokenizer, load_vllm_model, run_generation
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
-from utils.prompts import get_qa_instruction, get_task_instruction, get_webpage_to_reasonchain_instruction
+from utils.prompts import get_qa_instruction, get_task_instruction
 from utils.stage_wise_analysis import stage_wise_analysis
+from utils.summarizer import Summarizer
 
 
 logger = logging.getLogger(__name__)
@@ -32,47 +32,6 @@ def load_data(data_path: str) -> list[dict]:
         filtered_data = json.load(json_file)
     print(f"Data loaded successfully. Total examples: {len(filtered_data)}")
     return filtered_data
-
-
-def extract_relevant_info(search_results):
-    useful_info = []
-    for doc in search_results:
-        info = {"context": doc.text, "url": doc.url}
-        useful_info.append(info)
-
-    return useful_info
-
-
-def generate_webpage_to_reasonchain_batch(
-    original_questions: list[str],
-    prev_reasonings: list[str],
-    search_queries: list[str],
-    documents: list[str],
-    dataset_name: str,
-    batch_output_records: list[dict],  # New parameter to collect outputs
-    llm: LLM,
-    coherent: bool = False,
-) -> list[str]:
-    user_prompts = [
-        get_webpage_to_reasonchain_instruction(r, sq, doc)
-        for r, sq, doc in zip(prev_reasonings, search_queries, documents)
-    ]
-
-    prompts = [{"role": "user", "content": up} for up in user_prompts]
-    print("webpage ana prompts[0]")
-    print(prompts[0])
-
-    summ_sampling_params = SamplingParams(max_tokens=8192, temperature=0.6, top_p=0.95, stop=None)
-    raw_outputs = llm.chat(
-        messages=[[prompt] for prompt in prompts], sampling_params=summ_sampling_params, use_tqdm=True
-    )
-
-    extracted_infos = [extract_final_information(raw.outputs[0].text) for raw in raw_outputs]
-
-    for i, (p, r, e) in enumerate(zip(prompts, raw_outputs, extracted_infos)):
-        batch_output_records.append({"prompt": p, "raw_output": r.outputs[0].text, "extracted_info": e})
-
-    return extracted_infos
 
 
 def prepare_input_prompts(
@@ -239,7 +198,6 @@ def main(args: argparse.Namespace):
     subset_num = args.subset_num
     max_search_limit = args.max_search_limit
     max_turn = args.max_turn
-    top_k = args.top_k
     model_path = args.model_path
     output_dir_base = args.output_dir_base
     rollout_num = args.rollout_num
@@ -273,6 +231,15 @@ def main(args: argparse.Namespace):
         reranker = JinaReranker(model_name=args.reranker_model_name)
     else:
         raise ValueError(f"Unknown reranker: {args.reranker}")
+
+    # Initialize summarizer
+    summarizer = Summarizer(
+        llm=llm,
+        top_k=args.summarizer_top_k,
+        max_tokens=args.summarizer_max_tokens,
+        temperature=args.summarizer_temperature,
+        top_p=args.summarizer_top_p,
+    )
 
     # load last rollout
     last_rollout = find_last_rollout(output_dir_base, dataset_name)
@@ -345,7 +312,6 @@ def main(args: argparse.Namespace):
                 print("Generation completed, processing outputs...")
 
                 # Initialize batch variables
-                batch_relevant_info = []
                 batch_original_questions = []
                 batch_prev_reasonings = []
                 batch_search_queries = []
@@ -377,8 +343,6 @@ def main(args: argparse.Namespace):
                                 print(f'Search failed for query "{search_query}": {e}')
                                 search_results = []
                                 reranked_results = []
-                            relevant_info = extract_relevant_info(reranked_results[:top_k])
-                            seq["relevant_info"] = relevant_info
 
                             all_reasoning_steps = seq["output"]
                             all_reasoning_steps = all_reasoning_steps.replace("\n\n", "\n").split("\n")
@@ -406,10 +370,10 @@ def main(args: argparse.Namespace):
                             truncated_prev_reasoning = truncated_prev_reasoning.strip("\n")
 
                             # Collect parameters for batch processing
-                            batch_relevant_info.append(relevant_info)
                             batch_original_questions.append(seq["item"]["Question"])
                             batch_prev_reasonings.append(truncated_prev_reasoning)
                             batch_search_queries.append(search_query)
+                            batch_documents.append(reranked_results)
                             batch_sequences.append(seq)
 
                             # Update search count and executed queries
@@ -438,30 +402,20 @@ def main(args: argparse.Namespace):
 
                 print(f"get search time taken: {time.time() - start_search_time}")
 
-                for relevant_info in batch_relevant_info:
-                    formatted_documents = ""
-                    for i, doc_info in enumerate(relevant_info):
-                        formatted_documents += f"**Web Page {i + 1}:**\n"
-                        formatted_documents += json.dumps(doc_info, ensure_ascii=False, indent=2) + "\n"
-                    print(f"formatted_webpage_documents: {len(formatted_documents)}")
-                    batch_documents.append(formatted_documents)
-
                 if batch_sequences:
                     print(
                         f"Batch processing {len(batch_sequences)} sequences with generate_webpage_to_reasonchain_batch..."
                     )
-                    webpage_analyses = generate_webpage_to_reasonchain_batch(
-                        original_questions=batch_original_questions,
-                        prev_reasonings=batch_prev_reasonings,
+                    webpage_summaries = summarizer(
+                        previous_reasonings=batch_prev_reasonings,
                         search_queries=batch_search_queries,
                         documents=batch_documents,
-                        dataset_name=dataset_name,
                         batch_output_records=batch_output_records,  # Pass the collection list
-                        llm=llm,
                     )
+
                     print("Batch generation completed, assigning outputs to sequences...")
 
-                    for seq, analysis, doc in zip(batch_sequences, webpage_analyses, batch_documents):
+                    for seq, analysis, doc in zip(batch_sequences, webpage_summaries, batch_documents):
                         if isinstance(analysis, str):
                             append_text = f"\n\n{BEGIN_SEARCH_RESULT}{analysis}{END_SEARCH_RESULT}\n\n"
                             seq["prompt"] += append_text
@@ -548,7 +502,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--max_turn", type=int, default=15, help="Maximum number of turns.")
 
-    parser.add_argument("--top_k", type=int, default=10, help="Maximum number of search documents to return.")
+    parser.add_argument("--summarizer_top_k", type=int, default=10, help="Maximum number of search documents to use.")
 
     parser.add_argument("--max_doc_len", type=int, default=3000, help="Maximum length of each searched document.")
 
@@ -593,6 +547,16 @@ if __name__ == "__main__":
         "--reranker", type=str, default=None, choices=["jina", "qwen3", "contextualai"], help="Reranker to use"
     )
     parser.add_argument("--reranker_model_name", type=str, required=True, help="Reranker model name")
+
+    parser.add_argument(
+        "--summarizer_max_tokens", type=int, default=8192, help="Maximum number of tokens for the summarizer"
+    )
+    parser.add_argument(
+        "--summarizer_temperature", type=float, default=0.6, help="Sampling temperature for the summarizer"
+    )
+    parser.add_argument(
+        "--summarizer_top_p", type=float, default=0.95, help="Top-p sampling parameter for the summarizer"
+    )
 
     args = parser.parse_args()
 
