@@ -12,15 +12,9 @@ from vllm import LLM, SamplingParams
 from search.rerankers import JinaReranker
 from search.retrievers import ClueWeb22Retriever
 from utils import extract_answer
+from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
 from utils.prompts import get_qa_instruction, get_task_instruction, get_webpage_to_reasonchain_instruction
 from utils.stage_wise_analysis import stage_wise_analysis
-
-
-# Define special tokens
-BEGIN_SEARCH_QUERY = "<|begin_search_query|>"
-END_SEARCH_QUERY = "<|end_search_query|>"
-BEGIN_SEARCH_RESULT = "<|begin_search_result|>"
-END_SEARCH_RESULT = "<|end_search_result|>"
 
 
 def load_reasoning_model(model_path: str) -> tuple[LLM, AutoTokenizer]:
