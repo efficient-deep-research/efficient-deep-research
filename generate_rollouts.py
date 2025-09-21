@@ -11,7 +11,7 @@ from vllm import LLM, SamplingParams
 
 from search.rerankers import JinaReranker
 from search.retrievers import ClueWeb22Retriever
-from utils import extract_answer
+from utils import extract_final_information
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
 from utils.prompts import get_qa_instruction, get_task_instruction, get_webpage_to_reasonchain_instruction
 from utils.stage_wise_analysis import stage_wise_analysis
@@ -82,7 +82,7 @@ def generate_webpage_to_reasonchain_batch(
         messages=[[prompt] for prompt in prompts], sampling_params=summ_sampling_params, use_tqdm=True
     )
 
-    extracted_infos = [extract_answer(raw.outputs[0].text) for raw in raw_outputs]
+    extracted_infos = [extract_final_information(raw.outputs[0].text) for raw in raw_outputs]
 
     for i, (p, r, e) in enumerate(zip(prompts, raw_outputs, extracted_infos)):
         batch_output_records.append({"prompt": p, "raw_output": r.outputs[0].text, "extracted_info": e})
