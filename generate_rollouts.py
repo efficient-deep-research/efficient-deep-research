@@ -11,27 +11,10 @@ from vllm import LLM, SamplingParams
 
 from search.rerankers import JinaReranker
 from search.retrievers import ClueWeb22Retriever
-from utils import extract_final_information
+from utils import extract_final_information, load_tokenizer, load_vllm_model
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
 from utils.prompts import get_qa_instruction, get_task_instruction, get_webpage_to_reasonchain_instruction
 from utils.stage_wise_analysis import stage_wise_analysis
-
-
-def load_reasoning_model(model_path: str) -> tuple[LLM, AutoTokenizer]:
-    print(f"Loading tokenizer from {model_path}...")
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
-    print("Tokenizer loaded successfully.")
-
-    print(f"Loading model from {model_path}...")
-    print(f"device_count: {torch.cuda.device_count()}")
-
-    # Initialize the LLM
-    llm = LLM(model=model_path, tensor_parallel_size=torch.cuda.device_count(), gpu_memory_utilization=0.95)
-    print("Model loaded successfully.")
-    return llm, tokenizer
 
 
 def make_output_dir(output_dir_base: str, dataset_name: str, rollout_id: int) -> str:
@@ -305,7 +288,8 @@ def main(args: argparse.Namespace):
     print("-----------------------")
 
     # Reasoning Model Loading
-    llm, tokenizer = load_reasoning_model(model_path)
+    llm = load_vllm_model(model_path)
+    tokenizer = load_tokenizer(model_path)
 
     # Retriever Setup
     # retriever = FinewWebRetriever(default_k=10)
