@@ -9,7 +9,7 @@ from vllm import LLM, SamplingParams
 
 from search.rerankers import ContextualAIReranker, JinaReranker, Qwen3Reranker
 from search.retrievers import ClueWeb22Retriever, FineWebRetriever
-from utils import extract_between_tags, extract_final_information, load_tokenizer, load_vllm_model
+from utils import extract_between_tags, extract_final_information, load_tokenizer, load_vllm_model, run_generation
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
 from utils.prompts import get_qa_instruction, get_task_instruction, get_webpage_to_reasonchain_instruction
 from utils.stage_wise_analysis import stage_wise_analysis
@@ -69,30 +69,6 @@ def generate_webpage_to_reasonchain_batch(
         batch_output_records.append({"prompt": p, "raw_output": r.outputs[0].text, "extracted_info": e})
 
     return extracted_infos
-
-
-def run_generation(
-    sequences: list[dict],
-    max_tokens: int,
-    temperature: float,
-    top_p: float,
-    top_k_sampling: int,
-    llm: LLM,
-    tokenizer: AutoTokenizer,
-) -> list:
-    prompts = [s["prompt"] for s in sequences]
-
-    sampling_params = SamplingParams(
-        max_tokens=max_tokens,
-        temperature=temperature,
-        top_p=top_p,
-        top_k=top_k_sampling,
-        stop=[END_SEARCH_QUERY, tokenizer.eos_token],
-        include_stop_str_in_output=True,
-    )
-    output_list = llm.generate(prompts, sampling_params=sampling_params)
-    print(f"run_generation completed {len(output_list)}")
-    return output_list
 
 
 def prepare_input_prompts(
@@ -260,12 +236,7 @@ def main(args: argparse.Namespace):
     max_search_limit = args.max_search_limit
     max_turn = args.max_turn
     top_k = args.top_k
-    max_doc_len = args.max_doc_len
     model_path = args.model_path
-    temperature = args.temperature
-    top_p = args.top_p
-    top_k_sampling = args.top_k_sampling
-    max_tokens = args.max_tokens
     output_dir_base = args.output_dir_base
     rollout_num = args.rollout_num
 
@@ -358,7 +329,14 @@ def main(args: argparse.Namespace):
                 print(f"We have {len(sequences_needing_generation)} sequences needing generation...")
 
                 outputs = run_generation(
-                    sequences_needing_generation, max_tokens, temperature, top_p, top_k_sampling, llm, tokenizer
+                    prompts=[s["prompt"] for s in sequences_needing_generation],
+                    max_tokens=args.max_tokens,
+                    temperature=args.temperature,
+                    top_p=args.top_p,
+                    top_k_sampling=args.top_k_sampling,
+                    llm=llm,
+                    tokenizer=tokenizer,
+                    stop=[END_SEARCH_QUERY, tokenizer.eos_token],
                 )
                 print("Generation completed, processing outputs...")
 

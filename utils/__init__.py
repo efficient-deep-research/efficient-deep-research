@@ -3,7 +3,7 @@ import re
 
 import torch
 from transformers import AutoTokenizer
-from vllm import LLM
+from vllm import LLM, SamplingParams
 
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,29 @@ def extract_between_tags(text: str, start_tag: str, end_tag: str) -> str | None:
     if matches:
         return matches[-1].strip()
     return None
+
+
+def run_generation(
+    prompts: list[str],
+    llm: LLM,
+    tokenizer: AutoTokenizer,
+    max_tokens: int,
+    temperature: float,
+    top_p: float,
+    top_k_sampling: int,
+    stop: list[str],
+) -> list:
+    sampling_params = SamplingParams(
+        max_tokens=max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k_sampling,
+        stop=[END_SEARCH_QUERY, tokenizer.eos_token],
+        include_stop_str_in_output=True,
+    )
+    output_list = llm.generate(prompts, sampling_params=sampling_params)
+    print(f"run_generation completed {len(output_list)}")
+    return output_list
 
 
 def load_tokenizer(model_path: str, trust_remote_code: bool = True, padding_side: str = "left") -> AutoTokenizer:
