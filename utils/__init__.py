@@ -1,4 +1,5 @@
 import logging
+import re
 
 import torch
 from transformers import AutoTokenizer
@@ -16,6 +17,14 @@ def extract_final_information(output: str) -> str:
         extracted_text = output
 
     return extracted_text
+
+
+def extract_between_tags(text: str, start_tag: str, end_tag: str) -> str | None:
+    pattern = re.escape(start_tag) + r"(.*?)" + re.escape(end_tag)
+    matches = re.findall(pattern, text, flags=re.DOTALL)
+    if matches:
+        return matches[-1].strip()
+    return None
 
 
 def load_tokenizer(model_path: str, trust_remote_code: bool = True, padding_side: str = "left") -> AutoTokenizer:

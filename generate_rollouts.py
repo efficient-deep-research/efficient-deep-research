@@ -4,14 +4,12 @@ import os
 import re
 import time
 
-import torch
-from tqdm import tqdm
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 
 from search.rerankers import ContextualAIReranker, JinaReranker, Qwen3Reranker
 from search.retrievers import ClueWeb22Retriever, FineWebRetriever
-from utils import extract_final_information, load_tokenizer, load_vllm_model
+from utils import extract_between_tags, extract_final_information, load_tokenizer, load_vllm_model
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
 from utils.prompts import get_qa_instruction, get_task_instruction, get_webpage_to_reasonchain_instruction
 from utils.stage_wise_analysis import stage_wise_analysis
@@ -95,14 +93,6 @@ def run_generation(
     output_list = llm.generate(prompts, sampling_params=sampling_params)
     print(f"run_generation completed {len(output_list)}")
     return output_list
-
-
-def extract_between(text: str, start_tag: str, end_tag: str) -> str | None:
-    pattern = re.escape(start_tag) + r"(.*?)" + re.escape(end_tag)
-    matches = re.findall(pattern, text, flags=re.DOTALL)
-    if matches:
-        return matches[-1].strip()
-    return None
 
 
 def prepare_input_prompts(
@@ -389,7 +379,7 @@ def main(args: argparse.Namespace):
                     seq["all_info"].append({f"turn_{turn}_reason": text})
 
                     # Extract search query
-                    search_query = extract_between(text, BEGIN_SEARCH_QUERY, END_SEARCH_QUERY)
+                    search_query = extract_between_tags(text, BEGIN_SEARCH_QUERY, END_SEARCH_QUERY)
 
                     # If a search query is present and the needs to be executed
                     if search_query and seq["output"].rstrip().endswith(END_SEARCH_QUERY):
