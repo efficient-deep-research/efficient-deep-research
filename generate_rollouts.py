@@ -9,8 +9,8 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 
-from search.rerankers import JinaReranker
-from search.retrievers import ClueWeb22Retriever
+from search.rerankers import ContextualAIReranker, JinaReranker, Qwen3Reranker
+from search.retrievers import ClueWeb22Retriever, FineWebRetriever
 from utils import extract_final_information, load_tokenizer, load_vllm_model
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
 from utils.prompts import get_qa_instruction, get_task_instruction, get_webpage_to_reasonchain_instruction
@@ -287,17 +287,27 @@ def main(args: argparse.Namespace):
     print(f"Using {dataset_name} set.")
     print("-----------------------")
 
-    # Reasoning Model Loading
+    # Load model and tokenizer
     llm = load_vllm_model(model_path)
     tokenizer = load_tokenizer(model_path)
 
-    # Retriever Setup
-    # retriever = FinewWebRetriever(default_k=10)
-    retriever = ClueWeb22Retriever(default_k=10, use_cw22_a=False)
+    # Initialize retriever
+    if args.retriever == "fineweb":
+        retriever = FineWebRetriever(default_k=args.retriever_top_k)
+    elif args.retriever == "clueweb22":
+        retriever = ClueWeb22Retriever(default_k=args.retriever_top_k, use_cw22_a=args.use_cw22_a)
+    else:
+        raise ValueError(f"Unknown retriever: {args.retriever}")
 
-    # Reranker Setup
-    reranker = JinaReranker()
-    # reranker = Qwen3Reranker()
+    # Initialize reranker
+    if args.reranker == "contextualai":
+        reranker = ContextualAIReranker(model_name=args.reranker_model_name)
+    elif args.reranker == "qwen3":
+        reranker = Qwen3Reranker(model_name=args.reranker_model_name)
+    elif args.reranker == "jina":
+        reranker = JinaReranker(model_name=args.reranker_model_name)
+    else:
+        raise ValueError(f"Unknown reranker: {args.reranker}")
 
     # load last rollout
     last_rollout = find_last_rollout(output_dir_base, dataset_name)
@@ -390,12 +400,12 @@ def main(args: argparse.Namespace):
                             try:
                                 print(f'Executing search for query: "{search_query}"')
                                 search_results = retriever(search_query)
-                                rerankered_results, _ = reranker(search_query, search_results)
+                                reranked_results, _ = reranker(search_query, search_results)
                             except Exception as e:
                                 print(f'Search failed for query "{search_query}": {e}')
                                 search_results = []
-                                rerankered_results = []
-                            relevant_info = extract_relevant_info(rerankered_results[:top_k])
+                                reranked_results = []
+                            relevant_info = extract_relevant_info(reranked_results[:top_k])
                             seq["relevant_info"] = relevant_info
 
                             all_reasoning_steps = seq["output"]
@@ -599,6 +609,24 @@ if __name__ == "__main__":
     parser.add_argument(
         "--auto_resume", action="store_true", help="Automatically resume from the last checkpoint if available"
     )
+
+    parser.add_argument(
+        "--retriever", type=str, default="clueweb22", choices=["clueweb22", "fineweb"], help="Retriever to use"
+    )
+    parser.add_argument(
+        "--use_cw22_a",
+        action="store_true",
+        default=False,
+        help="Whether to use ClueWeb22-A for retrieval (default: ClueWeb22-B)",
+    )
+    parser.add_argument(
+        "--retriever_top_k", type=int, default=10, help="Top-k documents to retrieve from the retriever"
+    )
+
+    parser.add_argument(
+        "--reranker", type=str, default=None, choices=["jina", "qwen3", "contextualai"], help="Reranker to use"
+    )
+    parser.add_argument("--reranker_model_name", type=str, required=True, help="Reranker model name")
 
     args = parser.parse_args()
 
