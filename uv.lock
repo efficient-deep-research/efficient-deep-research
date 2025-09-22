@@ -179,6 +179,7 @@ dependencies = [
     { name = "requests" },
     { name = "seaborn" },
     { name = "torch" },
+    { name = "tqdm" },
     { name = "transformers" },
 ]
 
@@ -190,6 +191,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.5" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "torch", specifier = ">=2.8.0" },
+    { name = "tqdm", specifier = ">=4.67.1" },
     { name = "transformers", specifier = ">=4.56.0" },
 ]
 

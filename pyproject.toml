@@ -12,6 +12,7 @@ dependencies = [
     "transformers>=4.56.0",
     "matplotlib>=3.10.6",
     "seaborn>=0.13.2",
+    "tqdm>=4.67.1",
 ]
 
 [tool.ruff]
