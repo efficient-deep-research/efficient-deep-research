@@ -48,9 +48,10 @@ def main(args: argparse.Namespace):
                 )
 
     os.makedirs(output_path, exist_ok=True)
-    output_file = os.path.join(output_path, "preference_data.json")
+    output_file = os.path.join(output_path, "preference_data.jsonl")
     with open(output_file, "w") as f:
-        json.dump(dataset, f, indent=2)
+        for item in dataset:
+            f.write(json.dumps(item) + "\n")
     print(f"Saved preference dataset with {len(dataset)} items to {output_file}")
 
 
