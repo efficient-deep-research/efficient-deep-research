@@ -3,6 +3,7 @@ import json
 import os
 import re
 import time
+import types
 
 import torch
 from tqdm import tqdm
@@ -35,7 +36,7 @@ def load_reasoning_model(model_path: str) -> tuple[LLM, AutoTokenizer]:
     print(f"device_count: {torch.cuda.device_count()}")
 
     # Initialize the LLM
-    llm = LLM(model=model_path, tensor_parallel_size=torch.cuda.device_count(), gpu_memory_utilization=0.95)
+    llm = LLM(model=model_path, tensor_parallel_size=torch.cuda.device_count(), gpu_memory_utilization=0.9)
     print("Model loaded successfully.")
     return llm, tokenizer
 
@@ -199,6 +200,24 @@ def parse_steps(text: str) -> dict:
     return steps
 
 
+def with_429_retry(func, max_retries=5, initial_wait=5):
+    def wrapper(*args, **kwargs):
+        wait_time = initial_wait
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                if "429" in str(e):
+                    print(f"Received 429 error. Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    wait_time *= 2
+                else:
+                    raise e
+        raise Exception("Max retries exceeded.")
+
+    return wrapper
+
+
 def replace_recent_steps(origin_str: str, replace_str: str) -> str:
     """
     Replaces specific steps in the original reasoning steps with new steps.
@@ -320,6 +339,7 @@ def main(args: argparse.Namespace):
     # Reranker Setup
     reranker = JinaReranker()
     # reranker = Qwen3Reranker()
+    retriever.__call__ = types.MethodType(with_429_retry(retriever.__call__), retriever)
 
     # load last rollout
     last_rollout = find_last_rollout(output_dir_base, dataset_name)
@@ -409,14 +429,9 @@ def main(args: argparse.Namespace):
                             seq["search_count"] < max_search_limit
                             and search_query not in seq["executed_search_queries"]
                         ):
-                            try:
-                                print(f'Executing search for query: "{search_query}"')
-                                search_results = retriever(search_query)
-                                rerankered_results, _ = reranker(search_query, search_results)
-                            except Exception as e:
-                                print(f'Search failed for query "{search_query}": {e}')
-                                search_results = []
-                                rerankered_results = []
+                            print(f'Executing search for query: "{search_query}"')
+                            search_results = retriever(search_query)
+                            rerankered_results, _ = reranker(search_query, search_results)
                             relevant_info = extract_relevant_info(rerankered_results[:top_k])
                             seq["relevant_info"] = relevant_info
 
@@ -609,8 +624,6 @@ if __name__ == "__main__":
     parser.add_argument("--top_k_sampling", type=int, default=40, help="Top-k sampling parameter.")
 
     parser.add_argument("--max_tokens", type=int, default=20480, help="Maximum number of tokens to generate.")
-
-    parser.add_argument("--cache_dir_base", type=str, required=True, help="cache path.")
 
     parser.add_argument("--output_dir_base", type=str, required=True, help="output_dir")
 

@@ -1,0 +1,43 @@
+All outputs length statistics:
+mean: 1265.0
+std: 275.1443257637707
+median: 1199.0
+min: 890
+max: 1688
+25th_percentile: 1109.0
+75th_percentile: 1439.0
+
+Retrieval outputs length statistics:
+mean: 1412.0
+std: 237.1455249419647
+median: 1439.0
+min: 1109
+max: 1688
+25th_percentile: 1274.0
+75th_percentile: 1563.5
+
+No retrieval outputs length statistics:
+mean: 1044.5
+std: 154.5
+median: 1044.5
+min: 890
+max: 1199
+25th_percentile: 967.25
+75th_percentile: 1121.75
+
+
+Proportion of samples without retrieval: 0.4
+Proportion of samples with retrieval: 0.6
+model_path: Qwen/Qwen3-Next-80B-A3B-Thinking
+data_path: synthesized_sft_data/output/deepresearchgym_5samples/rollout_2/turn_2.json
+Overall Mean Metrics:
+search_count: 0.6
+output_len: 1265.0
+
+Mean Metrics for Samples with Retrieval:
+search_count: 1.0
+output_len: 1412.0
+
+Mean Metrics for Samples without Retrieval:
+search_count: 0.0
+output_len: 1044.5
