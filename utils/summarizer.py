@@ -25,7 +25,7 @@ class Summarizer:
         batch_output_records: list[dict] | None = None,
     ) -> list[str]:
         user_prompts = [
-            self._generate_prompt(pr, sq, doc) for pr, sq, doc in zip(previous_reasonings, search_queries, documents)
+            self._generate_prompt(pr, sq, docs) for pr, sq, docs in zip(previous_reasonings, search_queries, documents)
         ]
 
         prompts = [{"role": "user", "content": up} for up in user_prompts]
@@ -59,7 +59,7 @@ class Summarizer:
 
     def _generate_prompt(self, prev_reasoning: str, search_query: str, documents: list[Document]) -> str:
         documents_str = ""
-        for i, document in enumerate(documents):
+        for i, document in enumerate(documents[: self.top_k]):
             documents_str += f"**Web Page {i + 1}:**\n"
             document_data = {"context": document.text, "url": document.url}
             documents_str += json.dumps(document_data, ensure_ascii=False, indent=2) + "\n"
