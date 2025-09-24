@@ -5,6 +5,8 @@ import torch
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 
+from utils.constants import END_SEARCH_QUERY
+
 
 logger = logging.getLogger(__name__)
 

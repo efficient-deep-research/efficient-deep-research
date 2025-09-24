@@ -36,7 +36,7 @@ def load_data(data_path: str) -> list[dict]:
 
 def prepare_input_prompts(
     filtered_data: list[dict], max_search_limit: int, tokenizer: AutoTokenizer, subset_num: int
-) -> None:
+) -> tuple[list[dict], list[dict]]:
     input_list = []
     for item in filtered_data:
         question = item["Question"]
@@ -211,7 +211,7 @@ def main(args: argparse.Namespace):
     print("-----------------------")
 
     # Load model and tokenizer
-    llm = load_vllm_model(model_path)
+    llm = load_vllm_model(model_path, gpu_memory_utilization=args.gpu_memory_utilization)
     tokenizer = load_tokenizer(model_path)
 
     # Initialize retriever
@@ -262,7 +262,6 @@ def main(args: argparse.Namespace):
             active_sequences = checkpoint["active_sequences"]
             batch_output_records = checkpoint["batch_output_records"]
             start_turn = checkpoint["turn"]
-            filtered_data = load_data(data_path)
             is_rollout_initialized = True
         else:
             print("No valid checkpoint found, starting a new rollout.")
@@ -281,7 +280,6 @@ def main(args: argparse.Namespace):
             batch_output_records = []
             start_turn = 0
             output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
-            filtered_data = load_data(data_path)
 
         is_rollout_initialized = False
 
@@ -403,9 +401,7 @@ def main(args: argparse.Namespace):
                 print(f"get search time taken: {time.time() - start_search_time}")
 
                 if batch_sequences:
-                    print(
-                        f"Batch processing {len(batch_sequences)} sequences with generate_webpage_to_reasonchain_batch..."
-                    )
+                    print(f"Batch processing {len(batch_sequences)} sequences with summarizer...")
                     webpage_summaries = summarizer(
                         previous_reasonings=batch_prev_reasonings,
                         search_queries=batch_search_queries,
@@ -415,14 +411,17 @@ def main(args: argparse.Namespace):
 
                     print("Batch generation completed, assigning outputs to sequences...")
 
-                    for seq, analysis, doc in zip(batch_sequences, webpage_summaries, batch_documents):
+                    for seq, analysis, documents in zip(batch_sequences, webpage_summaries, batch_documents):
                         if isinstance(analysis, str):
                             append_text = f"\n\n{BEGIN_SEARCH_RESULT}{analysis}{END_SEARCH_RESULT}\n\n"
                             seq["prompt"] += append_text
                             seq["output"] += append_text
                             seq["history"].append(append_text)
                             seq["all_info"].extend(
-                                [{f"turn_{turn}_search": doc}, {f"turn_{turn}_webpage_analyses": analysis}]
+                                [
+                                    {f"turn_{turn}_search": [doc.text for doc in documents]},
+                                    {f"turn_{turn}_webpage_analyses": analysis},
+                                ]
                             )
                         else:
                             append_text = replace_recent_steps(seq["output"], analysis)
@@ -430,7 +429,10 @@ def main(args: argparse.Namespace):
                             seq["output"] += append_text
                             seq["history"].append(append_text)
                             seq["all_info"].extend(
-                                [{f"turn_{turn}_search": doc}, {f"turn_{turn}_webpage_analyses": analysis}]
+                                [
+                                    {f"turn_{turn}_search": [doc.text for doc in documents]},
+                                    {f"turn_{turn}_webpage_analyses": analysis},
+                                ]
                             )
 
             # Check if all sequences are finished
@@ -468,9 +470,6 @@ def main(args: argparse.Namespace):
 
         print(f"Batch outputs saved to {batch_output_file}")
 
-        # Prepare output list for evaluation
-        output_list = [seq["output"] for seq in active_sequences]
-
         # ---------------------- Stage-wise Analysis ----------------------
         turn_files = os.listdir(output_dir)
         turn_files = [file for file in turn_files if file.startswith("turn_")]
@@ -489,7 +488,7 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run SimpleDeepsearcer for various datasets.")
+    parser = argparse.ArgumentParser(description="Run SimpleDeepsearcher for various datasets.")
 
     parser.add_argument("--data_path", type=str, required=True, help="Path to the dataset to use.")
 
@@ -508,6 +507,8 @@ if __name__ == "__main__":
 
     # Model configuration
     parser.add_argument("--model_path", type=str, required=True, help="Path to the reasoning model.")
+
+    parser.add_argument("--gpu_memory_utilization", type=float, default=0.95, help="GPU memory utilization for vLLM.")
 
     # Sampling parameters
     parser.add_argument("--temperature", type=float, default=0.6, help="Sampling temperature.")
