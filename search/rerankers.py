@@ -162,3 +162,14 @@ class ContextualAIReranker(Reranker):
         sorted_documents = [documents[i] for i in sorted_idxs]
 
         return sorted_documents, sorted_scores
+
+
+def load_reranker(model_name: str, **kwargs) -> Reranker:
+    if model_name == "contextualai":
+        return ContextualAIReranker(**kwargs)
+    elif model_name == "jina":
+        return JinaReranker(**kwargs)
+    elif model_name == "qwen3":
+        return Qwen3Reranker(**kwargs)
+    else:
+        raise ValueError(f"Unknown reranker model name: {model_name}")
