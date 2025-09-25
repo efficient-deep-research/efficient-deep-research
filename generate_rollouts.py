@@ -70,76 +70,6 @@ def prepare_input_prompts(
     return active_sequences, input_list
 
 
-def parse_steps(text: str) -> dict:
-    """
-    Parses the reasoning steps from a given text.
-
-    Parameters:
-    - text (str): The text containing reasoning steps.
-
-    Returns:
-    - dict: A dictionary mapping step numbers to their content.
-    """
-    step_pattern = re.compile(r"Step\s+(\d+):\s*")
-    steps = {}
-    current_step_num = None
-    current_content = []
-
-    for line in text.splitlines():
-        step_match = step_pattern.match(line)
-        if step_match:
-            # If there's an ongoing step, save its content
-            if current_step_num is not None:
-                steps[current_step_num] = "\n".join(current_content).strip()
-            current_step_num = int(step_match.group(1))
-            content = line[step_match.end() :].strip()
-            current_content = [content] if content else []
-        else:
-            if current_step_num is not None:
-                current_content.append(line)
-
-    # Save the last step if any
-    if current_step_num is not None:
-        steps[current_step_num] = "\n".join(current_content).strip()
-
-    return steps
-
-
-def replace_recent_steps(origin_str: str, replace_str: str) -> str:
-    """
-    Replaces specific steps in the original reasoning steps with new steps.
-    If a replacement step contains "DELETE THIS STEP", that step is removed.
-
-    Parameters:
-    - origin_str (str): The original reasoning steps.
-    - replace_str (str): The steps to replace or delete.
-
-    Returns:
-    - str: The updated reasoning steps after applying replacements.
-    """
-    # Parse the original and replacement steps
-    origin_steps = parse_steps(origin_str)
-    replace_steps = parse_steps(replace_str)
-
-    # Apply replacements
-    for step_num, content in replace_steps.items():
-        if "DELETE THIS STEP" in content:
-            # Remove the step if it exists
-            if step_num in origin_steps:
-                del origin_steps[step_num]
-        else:
-            # Replace or add the step
-            origin_steps[step_num] = content
-
-    # Sort the steps by step number
-    sorted_steps = sorted(origin_steps.items())
-
-    # Reconstruct the reasoning steps as a single string
-    new_reasoning_steps = "\n\n".join([f"{content}" for num, content in sorted_steps])
-
-    return new_reasoning_steps
-
-
 def save_checkpoint(output_dir: str, rollout_id: int, turn: int, active_sequences: list, batch_output_records: list):
     # Convert sets to lists for JSON serialization
     serializable_sequences = []
@@ -406,28 +336,16 @@ def main(args: argparse.Namespace):
                     print("Batch generation completed, assigning outputs to sequences...")
 
                     for seq, analysis, documents in zip(batch_sequences, webpage_summaries, batch_documents):
-                        if isinstance(analysis, str):
-                            append_text = f"\n\n{BEGIN_SEARCH_RESULT}{analysis}{END_SEARCH_RESULT}\n\n"
-                            seq["prompt"] += append_text
-                            seq["output"] += append_text
-                            seq["history"].append(append_text)
-                            seq["all_info"].extend(
-                                [
-                                    {f"turn_{turn}_search": [doc.text for doc in documents]},
-                                    {f"turn_{turn}_webpage_analyses": analysis},
-                                ]
-                            )
-                        else:
-                            append_text = replace_recent_steps(seq["output"], analysis)
-                            seq["prompt"] += append_text
-                            seq["output"] += append_text
-                            seq["history"].append(append_text)
-                            seq["all_info"].extend(
-                                [
-                                    {f"turn_{turn}_search": [doc.text for doc in documents]},
-                                    {f"turn_{turn}_webpage_analyses": analysis},
-                                ]
-                            )
+                        append_text = f"\n\n{BEGIN_SEARCH_RESULT}{analysis}{END_SEARCH_RESULT}\n\n"
+                        seq["prompt"] += append_text
+                        seq["output"] += append_text
+                        seq["history"].append(append_text)
+                        seq["all_info"].extend(
+                            [
+                                {f"turn_{turn}_search": [doc.text for doc in documents]},
+                                {f"turn_{turn}_webpage_analyses": analysis},
+                            ]
+                        )
 
             # Check if all sequences are finished
             active_sequences_part = [
