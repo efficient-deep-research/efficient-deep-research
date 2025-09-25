@@ -425,7 +425,7 @@ if __name__ == "__main__":
     # Model configuration
     parser.add_argument("--model_path", type=str, required=True, help="Path to the reasoning model.")
 
-    parser.add_argument("--gpu_memory_utilization", type=float, default=0.95, help="GPU memory utilization for vLLM.")
+    parser.add_argument("--gpu_memory_utilization", type=float, default=0.75, help="GPU memory utilization for vLLM.")
 
     # Sampling parameters
     parser.add_argument("--temperature", type=float, default=0.6, help="Sampling temperature.")
@@ -459,7 +459,9 @@ if __name__ == "__main__":
 
     # Reranker configuration
     parser.add_argument("--reranker", type=str, help="Reranker to use")
-    parser.add_argument("--reranker_max_tokens", type=int, help="Maximum number of tokens for the reranker")
+    parser.add_argument(
+        "--reranker_max_tokens", type=int, default=1024, help="Maximum number of tokens for the reranker"
+    )
     parser.add_argument("--reranker_batch_size", type=int, default=1, help="Batch size for the reranker")
     parser.add_argument(
         "--reranker_kwargs", type=str, default="{}", help="Additional kwargs for the reranker in JSON format"
