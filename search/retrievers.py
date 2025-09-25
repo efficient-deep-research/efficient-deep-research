@@ -77,14 +77,14 @@ class ClueWeb22Retriever(Retriever):
         return documents
 
 
-def load_retriever(retriever_name: str, default_k: int = 10, **kwargs) -> Retriever:
-    if retriever_name == "clueweb22":
+def load_retriever(name: str, default_k: int = 10, **kwargs) -> Retriever:
+    if name == "clueweb22":
         return ClueWeb22Retriever(default_k=default_k, **kwargs)
-    elif retriever_name == "clueweb22-a":
+    elif name == "clueweb22-a":
         return ClueWeb22Retriever(default_k=default_k, use_cw22_a=True, **kwargs)
-    elif retriever_name == "clueweb22-b":
+    elif name == "clueweb22-b":
         return ClueWeb22Retriever(default_k=default_k, use_cw22_a=False, **kwargs)
-    elif retriever_name == "fineweb":
+    elif name == "fineweb":
         return FineWebRetriever(default_k=default_k, **kwargs)
     else:
-        raise ValueError(f"Unknown retriever: {retriever_name}")
+        raise ValueError(f"Unknown retriever name: {name}")

@@ -150,7 +150,12 @@ def main(args: argparse.Namespace):
     # Initialize reranker
     reranker = None
     if args.reranker is not None:
-        reranker = load_reranker(args.reranker, **json.loads(args.reranker_kwargs))
+        reranker = load_reranker(
+            args.reranker,
+            max_length=args.reranker_max_tokens,
+            batch_size=args.reranker_batch_size,
+            **json.loads(args.reranker_kwargs),
+        )
 
     # Initialize summarizer
     summarizer = Summarizer(
@@ -454,6 +459,8 @@ if __name__ == "__main__":
 
     # Reranker configuration
     parser.add_argument("--reranker", type=str, help="Reranker to use")
+    parser.add_argument("--reranker_max_tokens", type=int, help="Maximum number of tokens for the reranker")
+    parser.add_argument("--reranker_batch_size", type=int, default=1, help="Batch size for the reranker")
     parser.add_argument(
         "--reranker_kwargs", type=str, default="{}", help="Additional kwargs for the reranker in JSON format"
     )
