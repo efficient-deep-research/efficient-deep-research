@@ -58,7 +58,7 @@ def main(args: argparse.Namespace):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Format JSON data with prompt, key, and answer formatting.")
     parser.add_argument("--evaluated_rollouts_file", type=str, required=True, help="Path to the input JSON file")
-    parser.add_argument("--output_path", type=str, required=True, help="Path to the output JSON file")
+    parser.add_argument("--output_path", type=str, required=True, help="Path to the output directory")
     parser.add_argument(
         "--instruction_search_limit", type=int, default=10, help="Maximum number of searches per question."
     )

@@ -96,11 +96,6 @@ def extract_final_answer(answer: str) -> str:
         return ""
 
 
-def create_chat_pattern(prompt: str):
-    chat_pattern = [{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": prompt}]
-    return chat_pattern
-
-
 async def evaluate_with_openai_judge(
     semaphore: asyncio.Semaphore, prompt: str, schema_class: Any, client: AsyncOpenAI, model: str
 ) -> Dict:
@@ -383,7 +378,6 @@ async def evaluate_response_quality_async(
     )
 
     eval_kpr_results, eval_criteria_results = await asyncio.gather(kpr_task, criteria_task)
-    # eval_criteria_results = await asyncio.gather(criteria_task)
 
     # Reconstruct the results
     results = {}
