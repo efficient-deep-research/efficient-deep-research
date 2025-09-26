@@ -26,3 +26,6 @@ original_datasets/deepresearchgym
 
 # job script
 job.sh
+
+# cache directory
+cache/

@@ -1,44 +1,23 @@
 import argparse
 import json
+import logging
 import os
 import re
 import time
 import types
 
-import torch
-from tqdm import tqdm
 from transformers import AutoTokenizer
-from vllm import LLM, SamplingParams
 
-from search.rerankers import JinaReranker
-from search.retrievers import ClueWeb22Retriever
-from utils import extract_answer
-from utils.prompts import get_qa_instruction, get_task_instruction, get_webpage_to_reasonchain_instruction
+from search.rerankers import load_reranker
+from search.retrievers import load_retriever
+from utils import extract_between_tags, load_tokenizer, load_vllm_model, run_generation
+from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
+from utils.prompts import get_qa_instruction, get_task_instruction
 from utils.stage_wise_analysis import stage_wise_analysis
+from utils.summarizer import Summarizer
 
 
-# Define special tokens
-BEGIN_SEARCH_QUERY = "<|begin_search_query|>"
-END_SEARCH_QUERY = "<|end_search_query|>"
-BEGIN_SEARCH_RESULT = "<|begin_search_result|>"
-END_SEARCH_RESULT = "<|end_search_result|>"
-
-
-def load_reasoning_model(model_path: str) -> tuple[LLM, AutoTokenizer]:
-    print(f"Loading tokenizer from {model_path}...")
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
-    print("Tokenizer loaded successfully.")
-
-    print(f"Loading model from {model_path}...")
-    print(f"device_count: {torch.cuda.device_count()}")
-
-    # Initialize the LLM
-    llm = LLM(model=model_path, tensor_parallel_size=torch.cuda.device_count(), gpu_memory_utilization=0.9)
-    print("Model loaded successfully.")
-    return llm, tokenizer
+logger = logging.getLogger(__name__)
 
 
 def make_output_dir(output_dir_base: str, dataset_name: str, rollout_id: int) -> str:
@@ -56,82 +35,9 @@ def load_data(data_path: str) -> list[dict]:
     return filtered_data
 
 
-def extract_relevant_info(search_results):
-    useful_info = []
-    for doc in search_results:
-        info = {"context": doc.text, "url": doc.url}
-        useful_info.append(info)
-
-    return useful_info
-
-
-def generate_webpage_to_reasonchain_batch(
-    original_questions: list[str],
-    prev_reasonings: list[str],
-    search_queries: list[str],
-    documents: list[str],
-    dataset_name: str,
-    batch_output_records: list[dict],  # New parameter to collect outputs
-    llm: LLM,
-    coherent: bool = False,
-) -> list[str]:
-    user_prompts = [
-        get_webpage_to_reasonchain_instruction(r, sq, doc)
-        for r, sq, doc in zip(prev_reasonings, search_queries, documents)
-    ]
-
-    prompts = [{"role": "user", "content": up} for up in user_prompts]
-    print("webpage ana prompts[0]")
-    print(prompts[0])
-
-    summ_sampling_params = SamplingParams(max_tokens=8192, temperature=0.6, top_p=0.95, stop=None)
-    raw_outputs = llm.chat(
-        messages=[[prompt] for prompt in prompts], sampling_params=summ_sampling_params, use_tqdm=True
-    )
-
-    extracted_infos = [extract_answer(raw.outputs[0].text) for raw in raw_outputs]
-
-    for i, (p, r, e) in enumerate(zip(prompts, raw_outputs, extracted_infos)):
-        batch_output_records.append({"prompt": p, "raw_output": r.outputs[0].text, "extracted_info": e})
-
-    return extracted_infos
-
-
-def run_generation(
-    sequences: list[dict],
-    max_tokens: int,
-    temperature: float,
-    top_p: float,
-    top_k_sampling: int,
-    llm: LLM,
-    tokenizer: AutoTokenizer,
-) -> list:
-    prompts = [s["prompt"] for s in sequences]
-
-    sampling_params = SamplingParams(
-        max_tokens=max_tokens,
-        temperature=temperature,
-        top_p=top_p,
-        top_k=top_k_sampling,
-        stop=[END_SEARCH_QUERY, tokenizer.eos_token],
-        include_stop_str_in_output=True,
-    )
-    output_list = llm.generate(prompts, sampling_params=sampling_params)
-    print(f"run_generation completed {len(output_list)}")
-    return output_list
-
-
-def extract_between(text: str, start_tag: str, end_tag: str) -> str | None:
-    pattern = re.escape(start_tag) + r"(.*?)" + re.escape(end_tag)
-    matches = re.findall(pattern, text, flags=re.DOTALL)
-    if matches:
-        return matches[-1].strip()
-    return None
-
-
 def prepare_input_prompts(
     filtered_data: list[dict], max_search_limit: int, tokenizer: AutoTokenizer, subset_num: int
-) -> None:
+) -> tuple[list[dict], list[dict]]:
     input_list = []
     for item in filtered_data:
         question = item["Question"]
@@ -163,94 +69,6 @@ def prepare_input_prompts(
     ]
 
     return active_sequences, input_list
-
-
-def parse_steps(text: str) -> dict:
-    """
-    Parses the reasoning steps from a given text.
-
-    Parameters:
-    - text (str): The text containing reasoning steps.
-
-    Returns:
-    - dict: A dictionary mapping step numbers to their content.
-    """
-    step_pattern = re.compile(r"Step\s+(\d+):\s*")
-    steps = {}
-    current_step_num = None
-    current_content = []
-
-    for line in text.splitlines():
-        step_match = step_pattern.match(line)
-        if step_match:
-            # If there's an ongoing step, save its content
-            if current_step_num is not None:
-                steps[current_step_num] = "\n".join(current_content).strip()
-            current_step_num = int(step_match.group(1))
-            content = line[step_match.end() :].strip()
-            current_content = [content] if content else []
-        else:
-            if current_step_num is not None:
-                current_content.append(line)
-
-    # Save the last step if any
-    if current_step_num is not None:
-        steps[current_step_num] = "\n".join(current_content).strip()
-
-    return steps
-
-
-def with_429_retry(func, max_retries=5, initial_wait=5):
-    def wrapper(*args, **kwargs):
-        wait_time = initial_wait
-        for attempt in range(max_retries):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                if "429" in str(e):
-                    print(f"Received 429 error. Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-                    wait_time *= 2
-                else:
-                    raise e
-        raise Exception("Max retries exceeded.")
-
-    return wrapper
-
-
-def replace_recent_steps(origin_str: str, replace_str: str) -> str:
-    """
-    Replaces specific steps in the original reasoning steps with new steps.
-    If a replacement step contains "DELETE THIS STEP", that step is removed.
-
-    Parameters:
-    - origin_str (str): The original reasoning steps.
-    - replace_str (str): The steps to replace or delete.
-
-    Returns:
-    - str: The updated reasoning steps after applying replacements.
-    """
-    # Parse the original and replacement steps
-    origin_steps = parse_steps(origin_str)
-    replace_steps = parse_steps(replace_str)
-
-    # Apply replacements
-    for step_num, content in replace_steps.items():
-        if "DELETE THIS STEP" in content:
-            # Remove the step if it exists
-            if step_num in origin_steps:
-                del origin_steps[step_num]
-        else:
-            # Replace or add the step
-            origin_steps[step_num] = content
-
-    # Sort the steps by step number
-    sorted_steps = sorted(origin_steps.items())
-
-    # Reconstruct the reasoning steps as a single string
-    new_reasoning_steps = "\n\n".join([f"{content}" for num, content in sorted_steps])
-
-    return new_reasoning_steps
 
 
 def save_checkpoint(output_dir: str, rollout_id: int, turn: int, active_sequences: list, batch_output_records: list):
@@ -311,13 +129,7 @@ def main(args: argparse.Namespace):
     subset_num = args.subset_num
     max_search_limit = args.max_search_limit
     max_turn = args.max_turn
-    top_k = args.top_k
-    max_doc_len = args.max_doc_len
     model_path = args.model_path
-    temperature = args.temperature
-    top_p = args.top_p
-    top_k_sampling = args.top_k_sampling
-    max_tokens = args.max_tokens
     output_dir_base = args.output_dir_base
     rollout_num = args.rollout_num
 
@@ -329,17 +141,31 @@ def main(args: argparse.Namespace):
     print(f"Using {dataset_name} set.")
     print("-----------------------")
 
-    # Reasoning Model Loading
-    llm, tokenizer = load_reasoning_model(model_path)
+    # Load model and tokenizer
+    llm = load_vllm_model(model_path, gpu_memory_utilization=args.gpu_memory_utilization)
+    tokenizer = load_tokenizer(model_path)
 
-    # Retriever Setup
-    # retriever = FinewWebRetriever(default_k=10)
-    retriever = ClueWeb22Retriever(default_k=10, use_cw22_a=False)
+    # Initialize retriever
+    retriever = load_retriever(args.retriever, default_k=args.retriever_top_k, **json.loads(args.retriever_kwargs))
 
-    # Reranker Setup
-    reranker = JinaReranker()
-    # reranker = Qwen3Reranker()
-    retriever.__call__ = types.MethodType(with_429_retry(retriever.__call__), retriever)
+    # Initialize reranker
+    reranker = None
+    if args.reranker is not None:
+        reranker = load_reranker(
+            args.reranker,
+            max_length=args.reranker_max_tokens,
+            batch_size=args.reranker_batch_size,
+            **json.loads(args.reranker_kwargs),
+        )
+
+    # Initialize summarizer
+    summarizer = Summarizer(
+        llm=llm,
+        top_k=args.summarizer_top_k,
+        max_tokens=args.summarizer_max_tokens,
+        temperature=args.summarizer_temperature,
+        top_p=args.summarizer_top_p,
+    )
 
     # load last rollout
     last_rollout = find_last_rollout(output_dir_base, dataset_name)
@@ -362,7 +188,6 @@ def main(args: argparse.Namespace):
             active_sequences = checkpoint["active_sequences"]
             batch_output_records = checkpoint["batch_output_records"]
             start_turn = checkpoint["turn"]
-            filtered_data = load_data(data_path)
             is_rollout_initialized = True
         else:
             print("No valid checkpoint found, starting a new rollout.")
@@ -381,7 +206,6 @@ def main(args: argparse.Namespace):
             batch_output_records = []
             start_turn = 0
             output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
-            filtered_data = load_data(data_path)
 
         is_rollout_initialized = False
 
@@ -400,12 +224,18 @@ def main(args: argparse.Namespace):
                 print(f"We have {len(sequences_needing_generation)} sequences needing generation...")
 
                 outputs = run_generation(
-                    sequences_needing_generation, max_tokens, temperature, top_p, top_k_sampling, llm, tokenizer
+                    prompts=[s["prompt"] for s in sequences_needing_generation],
+                    max_tokens=args.max_tokens,
+                    temperature=args.temperature,
+                    top_p=args.top_p,
+                    top_k_sampling=args.top_k_sampling,
+                    llm=llm,
+                    tokenizer=tokenizer,
+                    stop=[END_SEARCH_QUERY, tokenizer.eos_token],
                 )
                 print("Generation completed, processing outputs...")
 
                 # Initialize batch variables
-                batch_relevant_info = []
                 batch_original_questions = []
                 batch_prev_reasonings = []
                 batch_search_queries = []
@@ -421,7 +251,7 @@ def main(args: argparse.Namespace):
                     seq["all_info"].append({f"turn_{turn}_reason": text})
 
                     # Extract search query
-                    search_query = extract_between(text, BEGIN_SEARCH_QUERY, END_SEARCH_QUERY)
+                    search_query = extract_between_tags(text, BEGIN_SEARCH_QUERY, END_SEARCH_QUERY)
 
                     # If a search query is present and the needs to be executed
                     if search_query and seq["output"].rstrip().endswith(END_SEARCH_QUERY):
@@ -429,11 +259,18 @@ def main(args: argparse.Namespace):
                             seq["search_count"] < max_search_limit
                             and search_query not in seq["executed_search_queries"]
                         ):
-                            print(f'Executing search for query: "{search_query}"')
-                            search_results = retriever(search_query)
-                            rerankered_results, _ = reranker(search_query, search_results)
-                            relevant_info = extract_relevant_info(rerankered_results[:top_k])
-                            seq["relevant_info"] = relevant_info
+                            try:
+                                print(f'Executing search for query: "{search_query}"')
+                                search_results = retriever(search_query)
+                            except Exception as e:
+                                print(f'Search failed for query "{search_query}": {e}')
+                                search_results = []
+
+                            if reranker is not None and len(search_results) > 0:
+                                print("Reranking search results")
+                                reranked_results, _ = reranker(search_query, search_results)
+                            else:
+                                reranked_results = search_results
 
                             all_reasoning_steps = seq["output"]
                             all_reasoning_steps = all_reasoning_steps.replace("\n\n", "\n").split("\n")
@@ -461,10 +298,10 @@ def main(args: argparse.Namespace):
                             truncated_prev_reasoning = truncated_prev_reasoning.strip("\n")
 
                             # Collect parameters for batch processing
-                            batch_relevant_info.append(relevant_info)
                             batch_original_questions.append(seq["item"]["Question"])
                             batch_prev_reasonings.append(truncated_prev_reasoning)
                             batch_search_queries.append(search_query)
+                            batch_documents.append(reranked_results)
                             batch_sequences.append(seq)
 
                             # Update search count and executed queries
@@ -493,46 +330,28 @@ def main(args: argparse.Namespace):
 
                 print(f"get search time taken: {time.time() - start_search_time}")
 
-                for relevant_info in batch_relevant_info:
-                    formatted_documents = ""
-                    for i, doc_info in enumerate(relevant_info):
-                        formatted_documents += f"**Web Page {i + 1}:**\n"
-                        formatted_documents += json.dumps(doc_info, ensure_ascii=False, indent=2) + "\n"
-                    print(f"formatted_webpage_documents: {len(formatted_documents)}")
-                    batch_documents.append(formatted_documents)
-
                 if batch_sequences:
-                    print(
-                        f"Batch processing {len(batch_sequences)} sequences with generate_webpage_to_reasonchain_batch..."
-                    )
-                    webpage_analyses = generate_webpage_to_reasonchain_batch(
-                        original_questions=batch_original_questions,
-                        prev_reasonings=batch_prev_reasonings,
+                    print(f"Batch processing {len(batch_sequences)} sequences with summarizer...")
+                    webpage_summaries = summarizer(
+                        previous_reasonings=batch_prev_reasonings,
                         search_queries=batch_search_queries,
                         documents=batch_documents,
-                        dataset_name=dataset_name,
                         batch_output_records=batch_output_records,  # Pass the collection list
-                        llm=llm,
                     )
+
                     print("Batch generation completed, assigning outputs to sequences...")
 
-                    for seq, analysis, doc in zip(batch_sequences, webpage_analyses, batch_documents):
-                        if isinstance(analysis, str):
-                            append_text = f"\n\n{BEGIN_SEARCH_RESULT}{analysis}{END_SEARCH_RESULT}\n\n"
-                            seq["prompt"] += append_text
-                            seq["output"] += append_text
-                            seq["history"].append(append_text)
-                            seq["all_info"].extend(
-                                [{f"turn_{turn}_search": doc}, {f"turn_{turn}_webpage_analyses": analysis}]
-                            )
-                        else:
-                            append_text = replace_recent_steps(seq["output"], analysis)
-                            seq["prompt"] += append_text
-                            seq["output"] += append_text
-                            seq["history"].append(append_text)
-                            seq["all_info"].extend(
-                                [{f"turn_{turn}_search": doc}, {f"turn_{turn}_webpage_analyses": analysis}]
-                            )
+                    for seq, analysis, documents in zip(batch_sequences, webpage_summaries, batch_documents):
+                        append_text = f"\n\n{BEGIN_SEARCH_RESULT}{analysis}{END_SEARCH_RESULT}\n\n"
+                        seq["prompt"] += append_text
+                        seq["output"] += append_text
+                        seq["history"].append(append_text)
+                        seq["all_info"].extend(
+                            [
+                                {f"turn_{turn}_search": [doc.text for doc in documents]},
+                                {f"turn_{turn}_webpage_analyses": analysis},
+                            ]
+                        )
 
             # Check if all sequences are finished
             active_sequences_part = [
@@ -560,7 +379,7 @@ def main(args: argparse.Namespace):
         # Define output JSON file path
         t = time.localtime()
         batch_output_file = os.path.join(
-            output_dir, f"test.{t.tm_mon}.{t.tm_mday},{t.tm_hour}:{t.tm_min}.info_extract.json"
+            output_dir, f"test.{t.tm_mon}.{t.tm_mday},{t.tm_hour}{t.tm_min}.info_extract.json"
         )
 
         # Save batch_output_records to JSON file
@@ -568,15 +387,6 @@ def main(args: argparse.Namespace):
             json.dump(batch_output_records, f, ensure_ascii=False, indent=2)
 
         print(f"Batch outputs saved to {batch_output_file}")
-
-        # Prepare output list for evaluation
-        output_list = [seq["output"] for seq in active_sequences]
-
-        # Run evaluation for factoid QAs
-        # if dataset_name in ["eval", "gaia"]:
-        #     run_evaluation_for_eval(filtered_data, input_list, output_list, dataset_name, output_dir, total_time, 'test')
-        # else:
-        #     run_evaluation(filtered_data, input_list, output_list, dataset_name, output_dir, total_time, 'test')
 
         # ---------------------- Stage-wise Analysis ----------------------
         turn_files = os.listdir(output_dir)
@@ -596,7 +406,7 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run SimpleDeepsearcer for various datasets.")
+    parser = argparse.ArgumentParser(description="Run SimpleDeepsearcher for various datasets.")
 
     parser.add_argument("--data_path", type=str, required=True, help="Path to the dataset to use.")
 
@@ -609,12 +419,14 @@ if __name__ == "__main__":
 
     parser.add_argument("--max_turn", type=int, default=15, help="Maximum number of turns.")
 
-    parser.add_argument("--top_k", type=int, default=10, help="Maximum number of search documents to return.")
+    parser.add_argument("--summarizer_top_k", type=int, default=10, help="Maximum number of search documents to use.")
 
     parser.add_argument("--max_doc_len", type=int, default=3000, help="Maximum length of each searched document.")
 
     # Model configuration
     parser.add_argument("--model_path", type=str, required=True, help="Path to the reasoning model.")
+
+    parser.add_argument("--gpu_memory_utilization", type=float, default=0.75, help="GPU memory utilization for vLLM.")
 
     # Sampling parameters
     parser.add_argument("--temperature", type=float, default=0.6, help="Sampling temperature.")
@@ -635,6 +447,37 @@ if __name__ == "__main__":
         "--auto_resume", action="store_true", help="Automatically resume from the last checkpoint if available"
     )
 
+    # Retriever configuration
+    parser.add_argument("--retriever", type=str, required=True, help="Retriever to use")
+    parser.add_argument(
+        "--retriever_top_k", type=int, default=10, help="Top-k documents to retrieve from the retriever"
+    )
+    parser.add_argument(
+        "--retriever_kwargs", type=str, default="{}", help="Additional kwargs for the retriever in JSON format"
+    )
+
+    # Reranker configuration
+    parser.add_argument("--reranker", type=str, help="Reranker to use")
+    parser.add_argument(
+        "--reranker_max_tokens", type=int, default=1024, help="Maximum number of tokens for the reranker"
+    )
+    parser.add_argument("--reranker_batch_size", type=int, default=1, help="Batch size for the reranker")
+    parser.add_argument(
+        "--reranker_kwargs", type=str, default="{}", help="Additional kwargs for the reranker in JSON format"
+    )
+
+    parser.add_argument(
+        "--summarizer_max_tokens", type=int, default=8192, help="Maximum number of tokens for the summarizer"
+    )
+    parser.add_argument(
+        "--summarizer_temperature", type=float, default=0.6, help="Sampling temperature for the summarizer"
+    )
+    parser.add_argument(
+        "--summarizer_top_p", type=float, default=0.95, help="Top-p sampling parameter for the summarizer"
+    )
+
     args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO)
 
     main(args)
