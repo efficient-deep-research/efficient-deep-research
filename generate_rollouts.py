@@ -378,7 +378,7 @@ def main(args: argparse.Namespace):
         # Define output JSON file path
         t = time.localtime()
         batch_output_file = os.path.join(
-            output_dir, f"test.{t.tm_mon}.{t.tm_mday},{t.tm_hour}:{t.tm_min}.info_extract.json"
+            output_dir, f"test.{t.tm_mon}.{t.tm_mday},{t.tm_hour}{t.tm_min}.info_extract.json"
         )
 
         # Save batch_output_records to JSON file
