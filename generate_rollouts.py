@@ -36,14 +36,14 @@ def load_data(data_path: str) -> list[dict]:
 
 
 def prepare_input_prompts(
-    filtered_data: list[dict], max_search_limit: int, tokenizer: AutoTokenizer, subset_num: int
+    filtered_data: list[dict], max_search_limit: int, tokenizer: AutoTokenizer, subset_num: int, initial_search_documents: list[str], initial_search_summaries: list[str]
 ) -> tuple[list[dict], list[dict]]:
     input_list = []
-    for item in filtered_data:
+    for item, initial_summary in zip(filtered_data, initial_search_summaries):
         question = item["Question"]
 
         instruction = get_qa_instruction(max_search_limit)
-        user_prompt = get_task_instruction(question)
+        user_prompt = get_task_instruction(question, initial_summary)
 
         prompt = [{"role": "user", "content": instruction + user_prompt}]
         prompt = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
@@ -63,9 +63,12 @@ def prepare_input_prompts(
             "history": [],
             "search_count": 0,
             "executed_search_queries": set(),
-            "all_info": [],
+            "all_info": [
+                {"initial_search": [doc.text for doc in initial_docs]},
+                {"initial_search_webpage_analysis": initial_summary},
+            ],
         }
-        for item, prompt in zip(filtered_data, input_list)
+        for item, prompt, initial_docs, initial_summary in zip(filtered_data, input_list, initial_search_documents, initial_search_summaries)
     ]
 
     return active_sequences, input_list
@@ -200,13 +203,43 @@ def main(args: argparse.Namespace):
         print(f"\n===================Rollout {rollout_id + 1} of {rollout_num}===================")
 
         if not is_rollout_initialized:
-            active_sequences, input_list = prepare_input_prompts(
-                load_data(data_path), max_search_limit, tokenizer, subset_num
-            )
             batch_output_records = []
+            data = load_data(data_path)
+            questions = [item["Question"] for item in data]
+
+            # perform initial search for all questions
+            batch_initial_search_documents = []
+            for question in questions:
+                try:
+                    print(f'Executing search for query: "{question}"')
+                    search_results = retriever(question)
+                except Exception as e:
+                    print(f'Search failed for query "{question}": {e}')
+                    search_results = []
+
+                if reranker is not None and len(search_results) > 0:
+                    print("Reranking search results")
+                    reranked_results, _ = reranker(question, search_results)
+                else:
+                    reranked_results = search_results
+
+                batch_initial_search_documents.append(reranked_results)
+            
+            initial_search_summaries = summarizer(
+                previous_reasonings=[], # empty list for initial search
+                search_queries=questions,
+                documents=batch_initial_search_documents,
+                batch_output_records=batch_output_records,  # Pass the collection list
+            )
+
+            active_sequences, input_list = prepare_input_prompts(
+                data, max_search_limit, tokenizer, subset_num, batch_initial_search_documents, initial_search_summaries
+            )
             start_turn = 0
             output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
-
+        
+        breakpoint()
+        
         is_rollout_initialized = False
 
         # Initialize collection structure
@@ -349,7 +382,7 @@ def main(args: argparse.Namespace):
                         seq["all_info"].extend(
                             [
                                 {f"turn_{turn}_search": [doc.text for doc in documents]},
-                                {f"turn_{turn}_webpage_analyses": analysis},
+                                {f"turn_{turn}_webpage_analysis": analysis},
                             ]
                         )
 

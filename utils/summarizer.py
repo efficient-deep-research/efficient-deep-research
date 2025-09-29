@@ -24,9 +24,17 @@ class Summarizer:
         documents: list[list[Document]],
         batch_output_records: list[dict] | None = None,
     ) -> list[str]:
-        user_prompts = [
-            self._generate_prompt(pr, sq, docs) for pr, sq, docs in zip(previous_reasonings, search_queries, documents)
-        ]
+
+        if len(previous_reasonings) == 0:
+            print("Performing initial search summarization...")
+            user_prompts = [
+                self._generate_initial_search_summary_prompt(sq, docs) for sq, docs in zip(search_queries, documents)
+            ]
+        else:
+            print("Performing iterative search summarization...")
+            user_prompts = [
+                self._generate_prompt(pr, sq, docs) for pr, sq, docs in zip(previous_reasonings, search_queries, documents)
+            ]
 
         prompts = [{"role": "user", "content": up} for up in user_prompts]
         logger.info(f"Summarizer prompts[0]: {prompts[0]}")
@@ -57,7 +65,7 @@ class Summarizer:
 
         return extracted_text
 
-    def _generate_prompt(self, prev_reasoning: str, search_query: str, documents: list[Document]) -> str:
+    def _generate_summary_prompt(self, prev_reasoning: str, search_query: str, documents: list[Document]) -> str:
         documents_str = ""
         for i, document in enumerate(documents[: self.top_k]):
             documents_str += f"**Web Page {i + 1}:**\n"
@@ -98,3 +106,45 @@ class Summarizer:
     """
 
         return prompt
+
+    def _generate_initial_search_summary_prompt(self, search_query: str, documents: list[Document]) -> str:
+        documents_str = ""
+        for i, document in enumerate(documents[: self.top_k]):
+            documents_str += f"**Web Page {i + 1}:**\n"
+            document_data = {"context": document.text, "url": document.url}
+            documents_str += json.dumps(document_data, ensure_ascii=False, indent=2) + "\n"
+
+        prompt = f"""**Task Instruction:**
+
+    You are the first step in a complex reasoning process. Your task is to read and analyze the provided **Searched Web Pages** in relation to the **Original Query**. Your objective is to create a comprehensive and factual summary of the information found. This summary will then be passed to a separate, powerful reasoning model, which will use it as a starting point to construct a detailed answer to the **Original Query**. Therefore, your summary must be accurate, well-organized, and contain the essential information needed to kickstart the subsequent reasoning process.
+
+    **Guidelines:**
+
+    1. **Analyze the Searched Web Pages:**
+    - Carefully review the content of each searched web page.
+    - Identify all factual information, key points, definitions, and main arguments that are directly relevant to answering the **Original Query**.
+
+    2. **Extract Foundational Information:**
+    - Extract and synthesize the information that provides a solid foundation for understanding and answering the query.
+    - Your goal is not to answer the query directly, but to equip the next model with the necessary information to do so. Ensure the extracted information is accurate.
+
+    3. **Output Format:**
+    - Present the helpful summary beginning with `**Final Information**` as shown below.
+
+    **Final Information**
+
+    [Helpful information for the reasoning model]
+
+    **Inputs:**
+    - **Original Query:**
+    {search_query}
+
+    - **Searched Web Pages:**
+    {documents_str}
+
+    Now, you should analyze the web pages and create a comprehensive summary based on the **Original Query** "{search_query}" to provide a helpful starting point for the subsequent reasoning model.
+
+    """
+
+        return prompt
+ 
