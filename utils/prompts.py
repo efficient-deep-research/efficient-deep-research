@@ -16,44 +16,8 @@ def get_qa_instruction(MAX_SEARCH_LIMIT: int) -> str:
 def get_task_instruction(question: str) -> str:
     user_prompt = (
         "Please answer the following question. You should think step by step to solve it.\n\n"
+        "Your answer should be clear, detailed, and insightful, and written in 50–100 words."
         "Provide your final answer in the format \\boxed{YOUR_ANSWER}.\n\n"
         f"Question:\n{question}\n\n"
     )
     return user_prompt
-
-
-def get_webpage_to_reasonchain_instruction(
-    prev_reasoning: str, search_query: str, document: str
-) -> str:
-    return f"""**Task Instruction:**
-
-You are tasked with reading and analyzing web pages based on the following inputs: **Previous Reasoning Steps**, **Current Search Query**, and **Searched Web Pages**. Your objective is to extract relevant and helpful information for **Current Search Query** from the **Searched Web Pages** and seamlessly integrate this information into the **Previous Reasoning Steps** to continue reasoning for the original question.
-
-**Guidelines:**
-
-1. **Analyze the Searched Web Pages:**
-- Carefully review the content of each searched web page.
-- Identify factual information that is relevant to the **Current Search Query** and can aid in the reasoning process for the original question.
-
-2. **Extract Relevant Information:**
-- Select the information from the Searched Web Pages that directly contributes to advancing the **Previous Reasoning Steps**.
-- Ensure that the extracted information is accurate and relevant.
-
-3. **Output Format:**
-- Present the helpful information for current search query: beginning with `**Final Information**` as shown below.
-**Final Information**
-
-[Helpful information]
-
-**Inputs:**
-- **Previous Reasoning Steps:**  
-{prev_reasoning}
-
-- **Current Search Query:**  
-{search_query}
-
-- **Searched Web Pages:**  
-{document}
-
-Now you should analyze each web page and find helpful information based on the current search query "{search_query}" and previous reasoning steps.
-"""

@@ -5,11 +5,14 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "numpy>=2.1.0,<2.3.0",
     "einops>=0.8.1",
     "fastapi[standard]>=0.116.1",
     "requests>=2.32.5",
-    "torch>=2.8.0",
     "transformers>=4.56.0",
+    "matplotlib>=3.10.6",
+    "seaborn>=0.13.2",
+    "tqdm>=4.67.1",
 ]
 
 [tool.ruff]

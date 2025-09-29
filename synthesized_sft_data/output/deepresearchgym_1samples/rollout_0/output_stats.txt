@@ -1,0 +1,126 @@
+All outputs length statistics:
+mean: 1790.0
+std: 0.0
+median: 1790.0
+min: 1790
+max: 1790
+25th_percentile: 1790.0
+75th_percentile: 1790.0
+
+Retrieval outputs length statistics:
+mean: 1790.0
+std: 0.0
+median: 1790.0
+min: 1790
+max: 1790
+25th_percentile: 1790.0
+75th_percentile: 1790.0
+
+No retrieval outputs length statistics:
+mean: 0
+std: 0
+median: 0
+min: 0
+max: 0
+25th_percentile: 0
+75th_percentile: 0
+
+
+Proportion of samples without retrieval: 0.0
+Proportion of samples with retrieval: 1.0
+model_path: Qwen/Qwen3-30B-A3B-Thinking-2507
+data_path: synthesized_sft_data/output/deepresearchgym_1samples/rollout_0/turn_2.json
+Overall Mean Metrics:
+search_count: 1.0
+output_len: 1790.0
+
+Mean Metrics for Samples with Retrieval:
+search_count: 1.0
+output_len: 1790.0
+
+Mean Metrics for Samples without Retrieval:
+output_len: 0
+All outputs length statistics:
+mean: 1790.0
+std: 0.0
+median: 1790.0
+min: 1790
+max: 1790
+25th_percentile: 1790.0
+75th_percentile: 1790.0
+
+Retrieval outputs length statistics:
+mean: 1790.0
+std: 0.0
+median: 1790.0
+min: 1790
+max: 1790
+25th_percentile: 1790.0
+75th_percentile: 1790.0
+
+No retrieval outputs length statistics:
+mean: 0
+std: 0
+median: 0
+min: 0
+max: 0
+25th_percentile: 0
+75th_percentile: 0
+
+
+Proportion of samples without retrieval: 0.0
+Proportion of samples with retrieval: 1.0
+model_path: Qwen/Qwen3-30B-A3B-Thinking-2507
+data_path: synthesized_sft_data/output/deepresearchgym_1samples/rollout_0/turn_2.json
+Overall Mean Metrics:
+search_count: 1.0
+output_len: 1790.0
+
+Mean Metrics for Samples with Retrieval:
+search_count: 1.0
+output_len: 1790.0
+
+Mean Metrics for Samples without Retrieval:
+output_len: 0
+All outputs length statistics:
+mean: 1790.0
+std: 0.0
+median: 1790.0
+min: 1790
+max: 1790
+25th_percentile: 1790.0
+75th_percentile: 1790.0
+
+Retrieval outputs length statistics:
+mean: 1790.0
+std: 0.0
+median: 1790.0
+min: 1790
+max: 1790
+25th_percentile: 1790.0
+75th_percentile: 1790.0
+
+No retrieval outputs length statistics:
+mean: 0
+std: 0
+median: 0
+min: 0
+max: 0
+25th_percentile: 0
+75th_percentile: 0
+
+
+Proportion of samples without retrieval: 0.0
+Proportion of samples with retrieval: 1.0
+model_path: Qwen/Qwen3-30B-A3B-Thinking-2507
+data_path: synthesized_sft_data/output/deepresearchgym_1samples/rollout_0/turn_2.json
+Overall Mean Metrics:
+search_count: 1.0
+output_len: 1790.0
+
+Mean Metrics for Samples with Retrieval:
+search_count: 1.0
+output_len: 1790.0
+
+Mean Metrics for Samples without Retrieval:
+output_len: 0

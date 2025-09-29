@@ -15,7 +15,7 @@ class Retriever:
         raise NotImplementedError
 
 
-class FinewWebRetriever(Retriever):
+class FineWebRetriever(Retriever):
     endpoint_url = "https://clueweb22.us/fineweb/search"
 
     def __call__(self, query: str, k: int | None = None) -> list[Document]:
@@ -75,3 +75,16 @@ class ClueWeb22Retriever(Retriever):
             documents.append(Document(text, url))
 
         return documents
+
+
+def load_retriever(name: str, default_k: int = 10, **kwargs) -> Retriever:
+    if name == "clueweb22":
+        return ClueWeb22Retriever(default_k=default_k, **kwargs)
+    elif name == "clueweb22-a":
+        return ClueWeb22Retriever(default_k=default_k, use_cw22_a=True, **kwargs)
+    elif name == "clueweb22-b":
+        return ClueWeb22Retriever(default_k=default_k, use_cw22_a=False, **kwargs)
+    elif name == "fineweb":
+        return FineWebRetriever(default_k=default_k, **kwargs)
+    else:
+        raise ValueError(f"Unknown retriever name: {name}")
