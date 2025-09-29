@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -63,8 +64,9 @@ def prepare_input_prompts(
             "history": [],
             "search_count": 0,
             "executed_search_queries": set(),
+            "executed_search_urls": {ref_id: data["url"] for ref_id, data in initial_docs.items()},
             "all_info": [
-                {"initial_search": [doc.text for doc in initial_docs]},
+                {"initial_search": {ref_id: data["text"] for ref_id, data in initial_docs.items()}},
                 {"initial_search_webpage_analysis": initial_summary},
             ],
         }
@@ -125,6 +127,24 @@ def find_last_rollout(output_dir_base: str, dataset_name: str) -> int:
 
     rollout_numbers = [int(d.split("_")[1]) for d in rollout_dirs]
     return max(rollout_numbers)
+
+
+def generate_ref_id(existing_ids: set, reranked_webpages: list[str]) -> str:
+    # Generate a unique hash ID based on the reranked webpages
+    result = {}
+    
+    for webpage in reranked_webpages:
+        hash_object = hashlib.md5(webpage.text.encode()).hexdigest()
+        for i in range(len(hash_object) - 3):
+            ref_id = hash_object[i:i+4]
+            if ref_id not in existing_ids and ref_id not in result.keys():
+                result[ref_id] = {
+                    "text": webpage.text,
+                    "url": webpage.url
+                }
+                break
+
+    return result
 
 
 def main(args: argparse.Namespace):
@@ -222,8 +242,11 @@ def main(args: argparse.Namespace):
                     reranked_results, _ = reranker(question, search_results)
                 else:
                     reranked_results = search_results
+                
+                # attend unique hash ids to each webpage
+                initial_search_documents = generate_ref_id(set(), reranked_results)
 
-                batch_initial_search_documents.append(reranked_results)
+                batch_initial_search_documents.append(initial_search_documents)
             
             initial_search_summaries = summarizer(
                 previous_reasonings=[], # empty list for initial search

@@ -33,7 +33,7 @@ class Summarizer:
         else:
             print("Performing iterative search summarization...")
             user_prompts = [
-                self._generate_prompt(pr, sq, docs) for pr, sq, docs in zip(previous_reasonings, search_queries, documents)
+                self._generate_summary_prompt(pr, sq, docs) for pr, sq, docs in zip(previous_reasonings, search_queries, documents)
             ]
 
         prompts = [{"role": "user", "content": up} for up in user_prompts]
@@ -65,12 +65,18 @@ class Summarizer:
 
         return extracted_text
 
-    def _generate_summary_prompt(self, prev_reasoning: str, search_query: str, documents: list[Document]) -> str:
+    def _prepare_documents_str(self, documents: dict) -> str:
         documents_str = ""
-        for i, document in enumerate(documents[: self.top_k]):
-            documents_str += f"**Web Page {i + 1}:**\n"
-            document_data = {"context": document.text, "url": document.url}
-            documents_str += json.dumps(document_data, ensure_ascii=False, indent=2) + "\n"
+        for i, (ref_id, data) in enumerate(documents.items()):
+            if i < self.top_k:
+                documents_str += f"ref_id: {ref_id}\n"
+                document_data = {"context": data["text"], "url": data["url"]}
+                documents_str += json.dumps(document_data, ensure_ascii=False, indent=2) + "\n"
+
+        return documents_str
+    
+    def _generate_summary_prompt(self, prev_reasoning: str, search_query: str, documents: dict) -> str:
+        documents_str = self._prepare_documents_str(documents)
 
         prompt = f"""**Task Instruction:**
 
@@ -86,8 +92,17 @@ class Summarizer:
     - Select the information from the Searched Web Pages that directly contributes to advancing the **Previous Reasoning Steps**.
     - Ensure that the extracted information is accurate and relevant.
 
-    3. **Output Format:**
+    3. **Citation Requirements:**
+    - You MUST cite the source web page for every piece of information you extract.
+    - Always cite the most relevant web page that supports each statement.
+    - Use the citation format: (#ref_id) at the end of each sentence or statement.
+    - For information supported by multiple sources, use: (#ref_id1),(#ref_id2)
+    - Example: "The global temperature has increased by 1.1°C since pre-industrial times.(#ab12),(#cd56)"
+
+    4. **Output Format:**
     - Present the helpful information for current search query: beginning with `**Final Information**` as shown below.
+    - Ensure all statements include proper citations.
+
     **Final Information**
 
     [Helpful information]
@@ -107,12 +122,8 @@ class Summarizer:
 
         return prompt
 
-    def _generate_initial_search_summary_prompt(self, search_query: str, documents: list[Document]) -> str:
-        documents_str = ""
-        for i, document in enumerate(documents[: self.top_k]):
-            documents_str += f"**Web Page {i + 1}:**\n"
-            document_data = {"context": document.text, "url": document.url}
-            documents_str += json.dumps(document_data, ensure_ascii=False, indent=2) + "\n"
+    def _generate_initial_search_summary_prompt(self, search_query: str, documents: dict) -> str:
+        documents_str = self._prepare_documents_str(documents)
 
         prompt = f"""**Task Instruction:**
 
@@ -128,9 +139,17 @@ class Summarizer:
     - Extract and synthesize the information that provides a solid foundation for understanding and answering the query.
     - Your goal is not to answer the query directly, but to equip the next model with the necessary information to do so. Ensure the extracted information is accurate.
 
-    3. **Output Format:**
-    - Present the helpful summary beginning with `**Final Information**` as shown below.
+    3. **Citation Requirements:**
+    - You MUST cite the source web page for every piece of information you extract.
+    - Always cite the most relevant web page that supports each statement.
+    - Use the citation format: (#ref_id) at the end of each sentence or statement.
+    - For information supported by multiple sources, use: (#ref_id1),(#ref_id2)
+    - Example: "The global temperature has increased by 1.1°C since pre-industrial times.(#ab12),(#cd56)"
 
+    4. **Output Format:**
+    - Present the helpful summary beginning with `**Final Information**` as shown below.
+    - Ensure all statements include proper citations.
+    
     **Final Information**
 
     [Helpful information for the reasoning model]
