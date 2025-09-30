@@ -261,8 +261,6 @@ def main(args: argparse.Namespace):
             start_turn = 0
             output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
         
-        breakpoint()
-        
         is_rollout_initialized = False
 
         # Initialize collection structure
@@ -327,6 +325,11 @@ def main(args: argparse.Namespace):
                                 reranked_results, _ = reranker(search_query, search_results)
                             else:
                                 reranked_results = search_results
+                            
+                            # attend unique hash ids to each webpage
+                            existing_ids = seq["executed_search_urls"].keys()
+                            search_documents = generate_ref_id(existing_ids, reranked_results)
+                            seq["executed_search_urls"].update({ref_id: data["url"] for ref_id, data in search_documents.items()})
 
                             all_reasoning_steps = seq["output"]
                             all_reasoning_steps = all_reasoning_steps.replace("\n\n", "\n").split("\n")
@@ -357,7 +360,7 @@ def main(args: argparse.Namespace):
                             batch_original_questions.append(seq["item"]["Question"])
                             batch_prev_reasonings.append(truncated_prev_reasoning)
                             batch_search_queries.append(search_query)
-                            batch_documents.append(reranked_results)
+                            batch_documents.append(search_documents)
                             batch_sequences.append(seq)
 
                             # Update search count and executed queries
@@ -404,7 +407,7 @@ def main(args: argparse.Namespace):
                         seq["history"].append(append_text)
                         seq["all_info"].extend(
                             [
-                                {f"turn_{turn}_search": [doc.text for doc in documents]},
+                                {f"turn_{turn}_search": {ref_id: data["text"] for ref_id, data in documents.items()}},
                                 {f"turn_{turn}_webpage_analysis": analysis},
                             ]
                         )
@@ -418,6 +421,7 @@ def main(args: argparse.Namespace):
                     "finished": ele["finished"],
                     "history": ele["history"],
                     "search_count": ele["search_count"],
+                    "executed_search_urls": ele["executed_search_urls"],
                     "all_info": ele["all_info"],
                 }
                 for ele in active_sequences

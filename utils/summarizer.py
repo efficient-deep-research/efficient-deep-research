@@ -21,7 +21,7 @@ class Summarizer:
         self,
         previous_reasonings: list[str],
         search_queries: list[str],
-        documents: list[list[Document]],
+        documents: list[dict],
         batch_output_records: list[dict] | None = None,
     ) -> list[str]:
 
@@ -69,7 +69,7 @@ class Summarizer:
         documents_str = ""
         for i, (ref_id, data) in enumerate(documents.items()):
             if i < self.top_k:
-                documents_str += f"ref_id: {ref_id}\n"
+                documents_str += f"Webpage ID: {ref_id}\n"
                 document_data = {"context": data["text"], "url": data["url"]}
                 documents_str += json.dumps(document_data, ensure_ascii=False, indent=2) + "\n"
 
@@ -95,9 +95,12 @@ class Summarizer:
     3. **Citation Requirements:**
     - You MUST cite the source web page for every piece of information you extract.
     - Always cite the most relevant web page that supports each statement.
-    - Use the citation format: (#ref_id) at the end of each sentence or statement.
-    - For information supported by multiple sources, use: (#ref_id1),(#ref_id2)
-    - Example: "The global temperature has increased by 1.1°C since pre-industrial times.(#ab12),(#cd56)"
+    - Each web page is identified by its **Webpage ID** (e.g., "ab12", "cd34").
+    - Use the citation format: (#WEBPAGE_ID) before the period or punctuation at the end of each sentence or statement.
+    - For information supported by multiple sources, use: (#WEBPAGE_ID1)(#WEBPAGE_ID2)
+    - **Citation Format Examples:**
+     * Single source: "The global temperature has increased by 1.1°C since pre-industrial times (#ab12)."
+     * Multiple sources: "Renewable energy adoption has accelerated in recent years (#ab12)(#cd34)."
 
     4. **Output Format:**
     - Present the helpful information for current search query: beginning with `**Final Information**` as shown below.
@@ -142,9 +145,12 @@ class Summarizer:
     3. **Citation Requirements:**
     - You MUST cite the source web page for every piece of information you extract.
     - Always cite the most relevant web page that supports each statement.
-    - Use the citation format: (#ref_id) at the end of each sentence or statement.
-    - For information supported by multiple sources, use: (#ref_id1),(#ref_id2)
-    - Example: "The global temperature has increased by 1.1°C since pre-industrial times.(#ab12),(#cd56)"
+    - Each web page is identified by its **Webpage ID** (e.g., "ab12", "cd34").
+    - Use the citation format: (#WEBPAGE_ID) before the period or punctuation at the end of each sentence or statement.
+    - For information supported by multiple sources, use: (#WEBPAGE_ID1)(#WEBPAGE_ID2)
+    - **Citation Format Examples:**
+     * Single source: "The global temperature has increased by 1.1°C since pre-industrial times (#ab12)."
+     * Multiple sources: "Renewable energy adoption has accelerated in recent years (#ab12)(#cd34)."
 
     4. **Output Format:**
     - Present the helpful summary beginning with `**Final Information**` as shown below.
