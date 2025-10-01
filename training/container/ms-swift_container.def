@@ -1,0 +1,34 @@
+Bootstrap: docker
+From: modelscope-registry.us-west-1.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.6.3-py311-torch2.7.1-vllm0.10.1.1-modelscope1.29.2-swift3.8.1
+
+%environment
+    USER_NAME=""
+    GROUP_NAME=""
+    export TZ="Asia/Tokyo"
+    export HOME="/home/${USER_NAME}"
+    export PWD="/home/${USER_NAME}"
+    export PATH="$HOME/.local/bin:$PATH"
+    export HF_HOME="/groups/${GROUP_NAME}/share/.cache/huggingface"
+    export MODELSCOPE_CACHE="/groups/${GROUP_NAME}/share/.cache/modelscope"
+
+%post
+    set -eux
+    mkdir -p $HOME
+
+    USER_NAME=""
+    GROUP_NAME=""
+    export TZ="Asia/Tokyo"
+    export HOME="/home/${USER_NAME}"
+    export PWD="/home/${USER_NAME}"
+
+    export DEBIAN_FRONTEND=noninteractive
+    ln -fs /usr/share/zoneinfo/Asia/Tokyo /etc/localtime
+    echo "Asia/Tokyo" > /etc/timezone
+    
+    apt-get -y update
+    apt-get -y upgrade
+    apt-get -y install tmux pigz pbzip2 clang htop
+
+    pip install --upgrade pip
+    pip install nvidia-ml-py
+    pip install --upgrade git+https://github.com/huggingface/transformers.git
