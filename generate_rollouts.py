@@ -13,7 +13,6 @@ from search.rerankers import load_reranker
 from search.retrievers import load_retriever
 from utils import extract_between_tags, load_tokenizer, load_vllm_model, run_generation
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
-# from utils.prompts import get_qa_instruction, get_task_instruction
 from utils.prompts import get_qa_instruction
 from utils.stage_wise_analysis import stage_wise_analysis
 from utils.summarizer import Summarizer
@@ -65,7 +64,7 @@ def prepare_input_prompts(
             "finished": False,
             "history": [],
             "search_count": 0,
-            "executed_search_queries": set(),
+            "executed_search_queries": [],
             "executed_search_urls": {ref_id: data["url"] for ref_id, data in initial_docs.items()},
             "all_info": [
                 {"initial_search": {ref_id: data["text"] for ref_id, data in initial_docs.items()}},
@@ -79,19 +78,10 @@ def prepare_input_prompts(
 
 
 def save_checkpoint(output_dir: str, rollout_id: int, turn: int, active_sequences: list, batch_output_records: list):
-    # Convert sets to lists for JSON serialization
-    serializable_sequences = []
-    for seq in active_sequences:
-        seq_copy = seq.copy()
-        # Convert set to list for JSON serialization
-        seq_copy["executed_search_queries"] = list(seq["executed_search_queries"])
-        serializable_sequences.append(seq_copy)
-
-    # Save checkpoint data to a JSON file
     checkpoint_data = {
         "rollout_id": rollout_id,
         "turn": turn,
-        "active_sequences": serializable_sequences,
+        "active_sequences": active_sequences,
         "batch_output_records": batch_output_records,
         "timestamp": time.time(),
     }
@@ -107,10 +97,6 @@ def load_checkpoint(output_dir: str) -> dict | None:
     if os.path.exists(checkpoint_path):
         with open(checkpoint_path, "r", encoding="utf-8") as f:
             checkpoint_data = json.load(f)
-
-        # Convert lists back to sets after loading
-        for seq in checkpoint_data["active_sequences"]:
-            seq["executed_search_queries"] = set(seq["executed_search_queries"])
 
         print(f"Checkpoint loaded: {checkpoint_path}")
         return checkpoint_data
@@ -138,7 +124,7 @@ def generate_ref_id(existing_ids: set, reranked_webpages: list[str]) -> str:
     for webpage in reranked_webpages:
         hash_object = hashlib.md5(webpage.text.encode()).hexdigest()
         for i in range(len(hash_object) - 3):
-            ref_id = hash_object[i:i+4]
+            ref_id = "#" + hash_object[i:i+4]
             if ref_id not in existing_ids and ref_id not in result.keys():
                 result[ref_id] = {
                     "text": webpage.text,
@@ -243,43 +229,54 @@ def main(args: argparse.Namespace):
         print(f"\n===================Rollout {rollout_id + 1} of {rollout_num}===================")
 
         if not is_rollout_initialized:
-            batch_output_records = []
-            data = load_data(data_path)
-            questions = [item["Question"] for item in data]
-
-            # perform initial search for all questions
-            batch_initial_search_documents = []
-            for question in questions:
-                try:
-                    print(f'Executing search for query: "{question}"')
-                    search_results = retriever(question)
-                except Exception as e:
-                    print(f'Search failed for query "{question}": {e}')
-                    search_results = []
-
-                if reranker is not None and len(search_results) > 0:
-                    print("Reranking search results")
-                    reranked_results, _ = reranker(question, search_results)
-                else:
-                    reranked_results = search_results
-                
-                # attend unique hash ids to each webpage
-                initial_search_documents = generate_ref_id(set(), reranked_results)
-
-                batch_initial_search_documents.append(initial_search_documents)
-            
-            initial_search_summaries = summarizer(
-                previous_reasonings=[], # empty list for initial search
-                search_queries=questions,
-                documents=batch_initial_search_documents,
-                batch_output_records=batch_output_records,  # Pass the collection list
-            )
-
-            active_sequences, input_list = prepare_input_prompts(
-                data, max_search_limit, tokenizer, subset_num, batch_initial_search_documents, initial_search_summaries
-            )
-            start_turn = 0
             output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
+            initial_active_sequences_path = os.path.join(output_dir_base, dataset_name, "initial_active_sequences.json")
+            start_turn = 0
+                        
+            if os.path.exists(initial_active_sequences_path):
+                print(f"Loading initial active sequences from {initial_active_sequences_path}")
+                with open(initial_active_sequences_path, "r", encoding="utf-8") as f:
+                    active_sequences = json.load(f)
+            else:
+                batch_output_records = []
+                data = load_data(data_path)
+                questions = [item["Question"] for item in data]
+
+                # perform initial search for all questions
+                batch_initial_search_documents = []
+                for question in questions:
+                    try:
+                        print(f'Executing search for query: "{question}"')
+                        search_results = retriever(question)
+                    except Exception as e:
+                        print(f'Search failed for query "{question}": {e}')
+                        search_results = []
+
+                    if reranker is not None and len(search_results) > 0:
+                        print("Reranking search results")
+                        reranked_results, _ = reranker(question, search_results)
+                    else:
+                        reranked_results = search_results
+                    
+                    # attend unique hash ids to each webpage
+                    initial_search_documents = generate_ref_id(set(), reranked_results)
+
+                    batch_initial_search_documents.append(initial_search_documents)
+                
+                initial_search_summaries = summarizer(
+                    previous_reasonings=[], # empty list for initial search
+                    search_queries=questions,
+                    documents=batch_initial_search_documents,
+                    batch_output_records=batch_output_records,  # Pass the collection list
+                )
+
+                active_sequences, input_list = prepare_input_prompts(
+                    data, max_search_limit, tokenizer, subset_num, batch_initial_search_documents, initial_search_summaries
+                )
+                
+                # save initial active sequences for future use
+                with open(initial_active_sequences_path, "w", encoding="utf-8") as f:
+                    json.dump(active_sequences, f, ensure_ascii=False, indent=2)
         
         is_rollout_initialized = False
 
@@ -331,7 +328,7 @@ def main(args: argparse.Namespace):
                     if search_query and seq["output"].rstrip().endswith(END_SEARCH_QUERY):
                         if (
                             seq["search_count"] < max_search_limit
-                            and search_query not in seq["executed_search_queries"]
+                            and search_query not in set(seq["executed_search_queries"])
                         ):
                             try:
                                 print(f'Executing search for query: "{search_query}"')
@@ -385,7 +382,7 @@ def main(args: argparse.Namespace):
 
                             # Update search count and executed queries
                             seq["search_count"] += 1
-                            seq["executed_search_queries"].add(search_query)
+                            seq["executed_search_queries"].append(search_query)
 
                         elif seq["search_count"] >= max_search_limit:
                             limit_message = f"\n{BEGIN_SEARCH_RESULT}\nThe maximum search limit is exceeded. You are not allowed to search.\n{END_SEARCH_RESULT}\n"
@@ -395,7 +392,7 @@ def main(args: argparse.Namespace):
                             seq["all_info"].append({f"turn_{turn}_search_limited": limit_message})
                             print(f'Search limit reached for query: "{search_query}"')
 
-                        elif search_query in seq["executed_search_queries"]:
+                        elif search_query in set(seq["executed_search_queries"]):
                             limit_message = f"\n{BEGIN_SEARCH_RESULT}\nYou have searched this query. Please refer to previous results.\n{END_SEARCH_RESULT}\n"
                             seq["prompt"] += limit_message
                             seq["output"] += limit_message

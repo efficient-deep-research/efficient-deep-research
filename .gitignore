@@ -30,3 +30,6 @@ job.sh
 
 # cache directory
 cache/
+
+# environment files
+.env

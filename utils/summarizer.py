@@ -78,77 +78,75 @@ class Summarizer:
     def _generate_summary_prompt(self, prev_reasoning: str, search_query: str, documents: dict) -> str:
         documents_str = self._prepare_documents_str(documents)
 
-        prompt = f"""**Task Instruction:**
+        return f"""**Task Instruction:**
 
-    You are tasked with reading and analyzing web pages based on the following inputs: **Previous Reasoning Steps**, **Current Search Query**, and **Searched Web Pages**. Your objective is to extract relevant and helpful information for **Current Search Query** from the **Searched Web Pages** and seamlessly integrate this information into the **Previous Reasoning Steps** to continue reasoning for the original question.
+You are tasked with reading and analyzing web pages based on the following inputs: **Previous Reasoning Steps**, **Current Search Query**, and **Searched Web Pages**. Your objective is to extract relevant and helpful information for **Current Search Query** from the **Searched Web Pages** and seamlessly integrate this information into the **Previous Reasoning Steps** to continue reasoning for the original question.
 
-    **Guidelines:**
+**Guidelines:**
 
-    1. **Analyze the Searched Web Pages:**
-    - Carefully review the content of each searched web page.
-    - Identify factual information that is relevant to the **Current Search Query** and can aid in the reasoning process for the original question.
+1. **Analyze the Searched Web Pages:**
+- Carefully review the content of each searched web page.
+- Identify factual information that is relevant to the **Current Search Query** and can aid in the reasoning process for the original question.
 
-    2. **Extract Relevant Information:**
-    - Select the information from the Searched Web Pages that directly contributes to advancing the **Previous Reasoning Steps**.
-    - Ensure that the extracted information is accurate and relevant.
+2. **Extract Relevant Information:**
+- Select the information from the Searched Web Pages that directly contributes to advancing the **Previous Reasoning Steps**.
+- Ensure that the extracted information is accurate and relevant.
 
-    3. **Citation Requirements:**
-    - You MUST cite the source web page for every piece of information you extract.
-    - Always cite the most relevant web page that supports each statement.
-    - Each web page is identified by its **Webpage ID** (e.g., "ab12", "cd34").
-    - Use the citation format: (#WEBPAGE_ID) before the period or punctuation at the end of each sentence or statement.
-    - For information supported by multiple sources, use: (#WEBPAGE_ID1)(#WEBPAGE_ID2)
-    - **Citation Format Examples:**
-     * Single source: "The global temperature has increased by 1.1°C since pre-industrial times (#ab12)."
-     * Multiple sources: "Renewable energy adoption has accelerated in recent years (#ab12)(#cd34)."
+3. **Citation Requirements:**
+- You MUST cite the source web page for every piece of information you extract.
+- Always cite the most relevant web page that supports each statement.
+- Each web page is identified by its **Webpage ID** (e.g., "ab12", "cd34").
+- Use the citation format: (#WEBPAGE_ID) before the period or punctuation at the end of each sentence or statement.
+- For information supported by multiple sources, use: (#WEBPAGE_ID1)(#WEBPAGE_ID2)
+- **Citation Format Examples:**
+    * Single source: "The global temperature has increased by 1.1°C since pre-industrial times (#ab12)."
+    * Multiple sources: "Renewable energy adoption has accelerated in recent years (#ab12)(#cd34)."
 
-    4. **Output Format:**
-    - Present the helpful information for current search query: beginning with `**Final Information**` as shown below.
-    - Ensure all statements include proper citations.
+4. **Output Format:**
+- Present the helpful information for current search query: beginning with `**Final Information**` as shown below.
+- Ensure all statements include proper citations.
 
-    **Final Information**
+**Final Information**
 
-    [Helpful information]
+[Helpful information]
 
-    **Inputs:**
-    - **Previous Reasoning Steps:**  
-    {prev_reasoning}
+**Inputs:**
+- **Previous Reasoning Steps:**  
+{prev_reasoning}
 
-    - **Current Search Query:**  
-    {search_query}
+- **Current Search Query:**  
+{search_query}
 
-    - **Searched Web Pages:**  
-    {documents_str}
+- **Searched Web Pages:**  
+{documents_str}
 
-    Now you should analyze each web page and find helpful information based on the current search query "{search_query}" and previous reasoning steps.
-    """
+Now you should analyze each web page and find helpful information based on the current search query "{search_query}" and previous reasoning steps.
+"""
 
-        return prompt
 
     def _generate_initial_search_summary_prompt(self, search_query: str, documents: dict) -> str:
         documents_str = self._prepare_documents_str(documents)
 
-        prompt = f"""**Role**
+        return f"""**Role**
 - You are an expert at extracting content relevant to a question from multiple ===Web Pages===.
 **Instructions**
-- Carefully read the ===Web Pages=== provided in Inputs and, following the **Extraction Guidelines** and **Output Format** below, extract the content relevant to the ===Query===.
+- Carefully read the ===Web Pages=== provided in Inputs and, following the **Webpage ID Guidelines** and **Output Format** below, extract the content relevant to the ===Query===.
 - Let's think this out in a step by step way to be sure we have the right answer.
-**Extraction Guidelines**
-- ===Web Pages=== are presented in the following format: "Webpage ID: Number\n"context": data["text"], "url": data["url"]".
-- When using sentences from the ===Web Pages=== that are relevant to the ===Query===, you **MUST** record the Webpage ID in the format **(#ID)** exactly as shown in the extraction examples below. If you rely on multiple sources, you **MUST** output the Webpage IDs in **separate parentheses** like **(#ab12)(#cd34)**. You **MUST** include the leading **#**.
-- **Examples of citing Webpage IDs:**
-  * Single source: "The global average temperature has increased by 1.1°C since pre-industrial times (#ab12)."
-  * Multiple sources: "Adoption of renewable energy has accelerated in recent years (#ab12)(#cd34)."
+**Webpage ID Guidelines**
+- ===Web Pages=== are presented in the following format: "Webpage ID: #xxxx (x = alphanumeric)\n"context": data["text"], "url": data["url"]"
+- When using sentences from the ===Web Pages=== that are relevant to the ===Query===, you **MUST** record the Webpage ID in the format (#+ alphanumerics) exactly as shown in the **Webpage ID Examples** below.
+- A Webpage ID is the identifier of the web page and begins with a leading "#" followed by alphanumeric characters.
+- Because the Webpage ID is an identifier, do not include any text other than the identifier inside the parentheses.
+- If you rely on multiple sources, output multiple Webpage IDs in a single set of parentheses separated by commas, like (#ab12,#cd34)
+**Webpage ID Examples**
+	- Single source: "Compared with pre-industrial times, the global average temperature has increased by 1.1°C (#ab12)"
+	- Multiple sources: "In recent years, the adoption of renewable energy has accelerated (#ab12,#cd34)"
 **Output Format**
 - You **MUST** begin with `**Final Information**`.
-- Include appropriate **(#ID)** citations in the extracted sentences.
+- Include the correct Webpage ID(s) in parentheses (#+ alphanumerics) in the extracted sentences.
 **Inputs**
 - ===Query===
 {search_query}
 - ===Web Pages===
 {documents_str}
-Go ahead—you've got this; extract the information step by step.
-        """
-
-        return prompt
- 
+Go ahead—you've got this; extract the information step by step."""
