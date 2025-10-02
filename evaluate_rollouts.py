@@ -232,7 +232,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model",
         type=str,
-        default="o3-mini",
+        default="gpt-5-nano",
         help="OpenAI model to use for evaluation (e.g., 'o3-mini', 'gpt-4o-mini').",
     )
     parser.add_argument("--max_concurrent", type=int, default=100, help="Maximum concurrent API requests")

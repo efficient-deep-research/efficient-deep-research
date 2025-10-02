@@ -128,48 +128,27 @@ class Summarizer:
     def _generate_initial_search_summary_prompt(self, search_query: str, documents: dict) -> str:
         documents_str = self._prepare_documents_str(documents)
 
-        prompt = f"""**Task Instruction:**
-
-    You are the first step in a complex reasoning process. Your task is to read and analyze the provided **Searched Web Pages** in relation to the **Original Query**. Your objective is to create a comprehensive and factual summary of the information found. This summary will then be passed to a separate, powerful reasoning model, which will use it as a starting point to construct a detailed answer to the **Original Query**. Therefore, your summary must be accurate, well-organized, and contain the essential information needed to kickstart the subsequent reasoning process.
-
-    **Guidelines:**
-
-    1. **Analyze the Searched Web Pages:**
-    - Carefully review the content of each searched web page.
-    - Identify all factual information, key points, definitions, and main arguments that are directly relevant to answering the **Original Query**.
-
-    2. **Extract Foundational Information:**
-    - Extract and synthesize the information that provides a solid foundation for understanding and answering the query.
-    - Your goal is not to answer the query directly, but to equip the next model with the necessary information to do so. Ensure the extracted information is accurate.
-
-    3. **Citation Requirements:**
-    - You MUST cite the source web page for every piece of information you extract.
-    - Always cite the most relevant web page that supports each statement.
-    - Each web page is identified by its **Webpage ID** (e.g., "ab12", "cd34").
-    - Use the citation format: (#WEBPAGE_ID) before the period or punctuation at the end of each sentence or statement.
-    - For information supported by multiple sources, use: (#WEBPAGE_ID1)(#WEBPAGE_ID2)
-    - **Citation Format Examples:**
-     * Single source: "The global temperature has increased by 1.1°C since pre-industrial times (#ab12)."
-     * Multiple sources: "Renewable energy adoption has accelerated in recent years (#ab12)(#cd34)."
-
-    4. **Output Format:**
-    - Present the helpful summary beginning with `**Final Information**` as shown below.
-    - Ensure all statements include proper citations.
-    
-    **Final Information**
-
-    [Helpful information for the reasoning model]
-
-    **Inputs:**
-    - **Original Query:**
-    {search_query}
-
-    - **Searched Web Pages:**
-    {documents_str}
-
-    Now, you should analyze the web pages and create a comprehensive summary based on the **Original Query** "{search_query}" to provide a helpful starting point for the subsequent reasoning model.
-
-    """
+        prompt = f"""**Role**
+- You are an expert at extracting content relevant to a question from multiple ===Web Pages===.
+**Instructions**
+- Carefully read the ===Web Pages=== provided in Inputs and, following the **Extraction Guidelines** and **Output Format** below, extract the content relevant to the ===Query===.
+- Let's think this out in a step by step way to be sure we have the right answer.
+**Extraction Guidelines**
+- ===Web Pages=== are presented in the following format: "Webpage ID: Number\n"context": data["text"], "url": data["url"]".
+- When using sentences from the ===Web Pages=== that are relevant to the ===Query===, you **MUST** record the Webpage ID in the format **(#ID)** exactly as shown in the extraction examples below. If you rely on multiple sources, you **MUST** output the Webpage IDs in **separate parentheses** like **(#ab12)(#cd34)**. You **MUST** include the leading **#**.
+- **Examples of citing Webpage IDs:**
+  * Single source: "The global average temperature has increased by 1.1°C since pre-industrial times (#ab12)."
+  * Multiple sources: "Adoption of renewable energy has accelerated in recent years (#ab12)(#cd34)."
+**Output Format**
+- You **MUST** begin with `**Final Information**`.
+- Include appropriate **(#ID)** citations in the extracted sentences.
+**Inputs**
+- ===Query===
+{search_query}
+- ===Web Pages===
+{documents_str}
+Go ahead—you've got this; extract the information step by step.
+        """
 
         return prompt
  

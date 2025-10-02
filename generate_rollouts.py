@@ -13,7 +13,8 @@ from search.rerankers import load_reranker
 from search.retrievers import load_retriever
 from utils import extract_between_tags, load_tokenizer, load_vllm_model, run_generation
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
-from utils.prompts import get_qa_instruction, get_task_instruction
+# from utils.prompts import get_qa_instruction, get_task_instruction
+from utils.prompts import get_qa_instruction
 from utils.stage_wise_analysis import stage_wise_analysis
 from utils.summarizer import Summarizer
 
@@ -43,10 +44,11 @@ def prepare_input_prompts(
     for item, initial_summary in zip(filtered_data, initial_search_summaries):
         question = item["Question"]
 
-        instruction = get_qa_instruction(max_search_limit)
-        user_prompt = get_task_instruction(question, initial_summary)
+        instruction = get_qa_instruction(max_search_limit, question, initial_summary)
+        # user_prompt = get_task_instruction(question, initial_summary)
 
-        prompt = [{"role": "user", "content": instruction + user_prompt}]
+        # prompt = [{"role": "user", "content": instruction + user_prompt}]
+        prompt = [{"role": "user", "content": instruction}]
         prompt = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
         input_list.append(prompt)
 
