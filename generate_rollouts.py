@@ -403,6 +403,14 @@ def main(args: argparse.Namespace):
 
         rollout_id += 1
 
+    # Save the hyperparameters to a JSON file
+    hparams = vars(args)
+    hparams_file = os.path.join(output_dir_base, "hparams.json")
+    with open(hparams_file, "w", encoding="utf-8") as f:
+        json.dump(hparams, f, ensure_ascii=False, indent=2)
+
+    print(f"Hyperparameters saved to {hparams_file}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run SimpleDeepsearcher for various datasets.")
