@@ -11,6 +11,8 @@ dependencies = [
     "transformers>=4.56.0",
     "matplotlib>=3.10.6",
     "seaborn>=0.13.2",
+    "spacy>=3.8.7",
+    "aiofiles>=24.1.0",
     "tqdm>=4.67.1",
 ]
 
