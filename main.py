@@ -1,14 +1,19 @@
 import json
+import os
 import re
 from typing import Iterator
 
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
+from openai import OpenAI
+from openai.types import Completion
 from pydantic import BaseModel
+from transformers import PreTrainedTokenizer
 
+from search.data import Document
 from search.rerankers import load_reranker
 from search.retrievers import load_retriever
-from utils import extract_between_tags, load_tokenizer, load_vllm_model, run_generation
+from utils import extract_between_tags, load_tokenizer
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
 from utils.prompts import get_qa_instruction, get_task_instruction
 from utils.summarizer import Summarizer
@@ -29,6 +34,61 @@ class RunRequest(BaseModel):
 
 
 app = FastAPI()
+
+
+def run_generation_openai(
+    prompt: str,
+    client: OpenAI,
+    model: str,
+    tokenizer: PreTrainedTokenizer,
+    max_tokens: int,
+    temperature: float,
+    top_p: float,
+    top_k_sampling: int,
+    stop: list[str],
+) -> Completion:
+    output = client.completions.create(
+        model=model,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        stop=[END_SEARCH_QUERY, tokenizer.eos_token],
+        temperature=temperature,
+        top_p=top_p,
+        extra_body={"top_k": top_k_sampling, "include_stop_str_in_output": True},
+    )
+    return output
+
+
+class OpenAISummarizer(Summarizer):
+    def __init__(
+        self,
+        client: OpenAI,
+        model: str,
+        top_k: int,
+        max_tokens: int = 8192,
+        temperature: float = 0.6,
+        top_p: float = 0.95,
+    ):
+        super().__init__(llm=None, top_k=top_k, max_tokens=max_tokens, temperature=temperature, top_p=top_p)
+        self.client = client
+        self.model = model
+
+    def __call__(self, previous_reasoning: str, search_query: str, documents: list[Document]) -> str:
+        prompt = self._generate_prompt(previous_reasoning, search_query, documents)
+        messages = [{"role": "user", "content": prompt}]
+
+        raw_output = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            max_tokens=self.max_tokens,
+            stop=None,
+            temperature=self.temperature,
+            top_p=self.top_p,
+        )
+
+        result = self._parse_result(raw_output.choices[0].message.content)
+
+        return result
 
 
 model_path = "RUC-AIBOX/Qwen-7B-SimpleDeepSearcher"
@@ -56,8 +116,11 @@ summarizer_temperature = 0.6
 summarizer_top_p = 0.95
 
 
-print("Loading LLM...")
-llm = load_vllm_model(model_path, gpu_memory_utilization=gpu_memory_utilization)
+print("Setting up OpenAI API...")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+openai_api_base = os.getenv("OPENAI_API_BASE")
+client = OpenAI(api_key=openai_api_key, base_url=openai_api_base)
+
 print("Loading tokenizer...")
 tokenizer = load_tokenizer(model_path)
 
@@ -72,8 +135,9 @@ if reranker_name is not None:
     )
 
 print("Loading summarizer...")
-summarizer = Summarizer(
-    llm=llm,
+summarizer = OpenAISummarizer(
+    client=client,
+    model=model_path,
     top_k=summarizer_top_k,
     max_tokens=summarizer_max_tokens,
     temperature=summarizer_temperature,
@@ -108,17 +172,18 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
 
     for _ in range(max_turns):
         turn_output = (
-            run_generation(
-                prompts=[prompt + output],
-                llm=llm,
+            run_generation_openai(
+                prompt=prompt + output,
+                client=client,
+                model=model_path,
                 tokenizer=tokenizer,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p,
                 top_k_sampling=top_k_sampling,
                 stop=[END_SEARCH_QUERY, tokenizer.eos_token],
-            )[0]
-            .outputs[0]
+            )
+            .choices[0]
             .text
         )
 
@@ -160,11 +225,10 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                             reasoning_steps.append("...")
 
                 webpage_summary = summarizer(
-                    previous_reasonings=["\n\n".join(reasoning_steps)],
-                    search_queries=[search_query],
-                    documents=[reranked_results],
-                    # batch_output_records=batch_output_records,  # Pass the collection list
-                )[0]
+                    previous_reasoning="\n\n".join(reasoning_steps),
+                    search_query=search_query,
+                    documents=reranked_results,
+                )
 
                 append_text = f"\n\n{BEGIN_SEARCH_RESULT}{webpage_summary}{END_SEARCH_RESULT}\n\n"
                 output += append_text
