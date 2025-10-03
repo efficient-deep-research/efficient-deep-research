@@ -23,7 +23,7 @@ synthesized_dataset/curated_dataset/
 synthesized_dataset/output/
 synthesized_dataset/deepresearchgym/
 original_datasets/deepresearchgym
-original_datasets/dataset_for_dop/
+original_datasets/dataset_for_dpo/
 
 # job script
 job.sh

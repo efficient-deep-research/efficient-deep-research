@@ -1,11 +1,11 @@
 All outputs length statistics:
-mean: 2118.4
-std: 741.2941656319709
-median: 2184.0
-min: 1048
-max: 3323
-25th_percentile: 1767.0
-75th_percentile: 2270.0
+mean: 2238.6
+std: 820.5192502312179
+median: 1862.0
+min: 1370
+max: 3480
+25th_percentile: 1559.0
+75th_percentile: 2922.0
 
 Retrieval outputs length statistics:
 mean: 0
@@ -17,26 +17,26 @@ max: 0
 75th_percentile: 0
 
 No retrieval outputs length statistics:
-mean: 2118.4
-std: 741.2941656319709
-median: 2184.0
-min: 1048
-max: 3323
-25th_percentile: 1767.0
-75th_percentile: 2270.0
+mean: 2238.6
+std: 820.5192502312179
+median: 1862.0
+min: 1370
+max: 3480
+25th_percentile: 1559.0
+75th_percentile: 2922.0
 
 
 Proportion of samples without retrieval: 1.0
 Proportion of samples with retrieval: 0.0
 model_path: Qwen/Qwen3-30B-A3B-Thinking-2507
-data_path: synthesized_dataset/deepresearchgym_5samples/rollout_0/turn_1.json
+data_path: synthesized_dataset/deepresearchgym_5samples/rollout_2/turn_1.json
 Overall Mean Metrics:
 search_count: 0.0
-output_len: 2118.4
+output_len: 2238.6
 
 Mean Metrics for Samples with Retrieval:
 output_len: 0
 
 Mean Metrics for Samples without Retrieval:
 search_count: 0.0
-output_len: 2118.4
+output_len: 2238.6

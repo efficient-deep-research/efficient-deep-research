@@ -44,9 +44,7 @@ def prepare_input_prompts(
         question = item["Question"]
 
         instruction = get_qa_instruction(max_search_limit, question, initial_summary)
-        # user_prompt = get_task_instruction(question, initial_summary)
 
-        # prompt = [{"role": "user", "content": instruction + user_prompt}]
         prompt = [{"role": "user", "content": instruction}]
         prompt = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
         input_list.append(prompt)
@@ -231,12 +229,15 @@ def main(args: argparse.Namespace):
         if not is_rollout_initialized:
             output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
             initial_active_sequences_path = os.path.join(output_dir_base, dataset_name, "initial_active_sequences.json")
+            initial_batch_output_records_path = os.path.join(output_dir_base, dataset_name, "initial_batch_output_records.json")
             start_turn = 0
                         
-            if os.path.exists(initial_active_sequences_path):
-                print(f"Loading initial active sequences from {initial_active_sequences_path}")
+            if os.path.exists(initial_active_sequences_path) and os.path.exists(initial_batch_output_records_path):
+                print(f"Loading initial search status from {initial_active_sequences_path}, {initial_batch_output_records_path}")
                 with open(initial_active_sequences_path, "r", encoding="utf-8") as f:
                     active_sequences = json.load(f)
+                with open(initial_batch_output_records_path, "r", encoding="utf-8") as f:
+                    batch_output_records = json.load(f)
             else:
                 batch_output_records = []
                 data = load_data(data_path)
@@ -277,6 +278,9 @@ def main(args: argparse.Namespace):
                 # save initial active sequences for future use
                 with open(initial_active_sequences_path, "w", encoding="utf-8") as f:
                     json.dump(active_sequences, f, ensure_ascii=False, indent=2)
+                with open(initial_batch_output_records_path, "w", encoding="utf-8") as f:
+                    json.dump(batch_output_records, f, ensure_ascii=False, indent=2)
+                
         
         is_rollout_initialized = False
 

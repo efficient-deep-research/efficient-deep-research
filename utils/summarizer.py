@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from vllm import LLM, SamplingParams
 
@@ -23,21 +24,21 @@ class Summarizer:
         search_queries: list[str],
         documents: list[dict],
         batch_output_records: list[dict] | None = None,
+        max_retry: int = 10,
     ) -> list[str]:
 
         if len(previous_reasonings) == 0:
-            print("Performing initial search summarization...")
+            logger.info("Performing initial search summarization...")
             user_prompts = [
                 self._generate_initial_search_summary_prompt(sq, docs) for sq, docs in zip(search_queries, documents)
             ]
         else:
-            print("Performing iterative search summarization...")
+            logger.info("Performing iterative search summarization...")
             user_prompts = [
                 self._generate_summary_prompt(pr, sq, docs) for pr, sq, docs in zip(previous_reasonings, search_queries, documents)
             ]
 
         prompts = [{"role": "user", "content": up} for up in user_prompts]
-        logger.info(f"Summarizer prompts[0]: {prompts[0]}")
 
         summ_sampling_params = SamplingParams(
             max_tokens=self.max_tokens, temperature=self.temperature, top_p=self.top_p, stop=None
@@ -48,9 +49,75 @@ class Summarizer:
 
         results = [self._parse_result(raw.outputs[0].text) for raw in raw_outputs]
 
+        retry_count = 0
+        while True:
+            invalid_indices = []
+            for i, (res, docs) in enumerate(zip(results, documents)):
+                valid_ids = list(docs.keys())
+                validation = self._validate_citation_format(res, valid_ids)
+                if not validation['is_valid']:
+                    invalid_indices.append(i)
+                    logger.warning(f"Invalid citation format found in result {i}: {validation['errors']}")
+
+            if len(invalid_indices) == 0:
+                logger.info("All outputs have valid citation formats.")
+                break
+
+            if retry_count >= max_retry:
+                logger.error("Maximum retry attempts reached. Some outputs may still have invalid citation formats.")
+                break
+
+            logger.info(f"Retrying {len(invalid_indices)} outputs due to invalid citation formats...")
+            retry_prompts = [prompts[i] for i in invalid_indices]
+            retry_raw_outputs = self.llm.chat(
+                messages=[[prompt] for prompt in retry_prompts], sampling_params=summ_sampling_params, use_tqdm=True
+            )
+            for idx, raw in zip(invalid_indices, retry_raw_outputs):
+                results[idx] = self._parse_result(raw.outputs[0].text)
+                raw_outputs[idx] = raw
+
+            retry_count += 1
+        
+        
         if batch_output_records is not None:
             for p, r, e in zip(prompts, raw_outputs, results):
                 batch_output_records.append({"prompt": p, "raw_output": r.outputs[0].text, "extracted_info": e})
+
+        return results
+
+    def _validate_citation_format(self, text: str, valid_ids: list[str]) -> dict:
+        results = {
+            'is_valid': True,
+            'errors': [],
+        }
+        
+        citation_pattern = r'\([^)]*#[0-9a-f]{4}[^)]*\)'
+        matches = re.finditer(citation_pattern, text)
+        
+        for match in matches:
+            citation = match.group()
+            content = citation[1:-1]
+
+            # Check if it starts with #
+            if not content.startswith('#'):
+                results['is_valid'] = False
+                results['errors'].append(citation)
+                continue
+            
+            # Check if it matches the allowed pattern
+            allowed_pattern = r'^#[0-9a-f]{4}(,#[0-9a-f]{4})*$'
+            if not re.match(allowed_pattern, content):
+                results['is_valid'] = False
+                results['errors'].append(citation)
+                continue
+            
+            # Check if each ID is in valid_ids
+            ids = content.split(',')
+            for id_str in ids:
+                if id_str not in valid_ids:
+                    results['is_valid'] = False
+                    results['errors'].append(citation)
+                    break
 
         return results
 
