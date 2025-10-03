@@ -29,16 +29,3 @@ f{initial_search_result}
 - ===question===
 f{question}
 I'm confident you'll deliver the correct answer—step by step and precise."""
-
-
-# def get_task_instruction(question: str, initial_search_result: str) -> str:
-#     user_prompt = (
-#         Based on the initial information provided below, please answer the question. You should think step by step to solve it.
-#         Your answer should be clear, detailed, and insightful.
-#         Your answer should be written in 50-100 words and structured in 2-5 sentences. 
-#         Do NOT answer with a single word, phrase or sentence.
-#         Provide your answer in the format \\boxed{YOUR_ANSWER}.
-#         fQuestion:{question}
-#         fInitial Web Search Result:{initial_search_result}
-#     )
-#     return user_prompt

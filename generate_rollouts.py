@@ -37,7 +37,12 @@ def load_data(data_path: str) -> list[dict]:
 
 
 def prepare_input_prompts(
-    filtered_data: list[dict], max_search_limit: int, tokenizer: AutoTokenizer, subset_num: int, initial_search_documents: list[str], initial_search_summaries: list[str]
+    filtered_data: list[dict],
+    max_search_limit: int,
+    tokenizer: AutoTokenizer,
+    subset_num: int,
+    initial_search_documents: list[str],
+    initial_search_summaries: list[str],
 ) -> tuple[list[dict], list[dict]]:
     input_list = []
     for item, initial_summary in zip(filtered_data, initial_search_summaries):
@@ -69,7 +74,9 @@ def prepare_input_prompts(
                 {"initial_search_webpage_analysis": initial_summary},
             ],
         }
-        for item, prompt, initial_docs, initial_summary in zip(filtered_data, input_list, initial_search_documents, initial_search_summaries)
+        for item, prompt, initial_docs, initial_summary in zip(
+            filtered_data, input_list, initial_search_documents, initial_search_summaries
+        )
     ]
 
     return active_sequences, input_list
@@ -118,19 +125,17 @@ def find_last_rollout(output_dir_base: str, dataset_name: str) -> int:
 def generate_ref_id(existing_ids: set, reranked_webpages: list[str]) -> str:
     # Generate a unique hash ID based on the reranked webpages
     result = {}
-    
+
     for webpage in reranked_webpages:
         hash_object = hashlib.md5(webpage.text.encode()).hexdigest()
         for i in range(len(hash_object) - 3):
-            ref_id = "#" + hash_object[i:i+4]
+            ref_id = "#" + hash_object[i : i + 4]
             if ref_id not in existing_ids and ref_id not in result.keys():
-                result[ref_id] = {
-                    "text": webpage.text,
-                    "url": webpage.url
-                }
+                result[ref_id] = {"text": webpage.text, "url": webpage.url}
                 break
 
     return result
+
 
 def with_429_retry(func, max_retries=5, initial_wait=5):
     def wrapper(*args, **kwargs):
@@ -228,12 +233,18 @@ def main(args: argparse.Namespace):
 
         if not is_rollout_initialized:
             output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
-            initial_active_sequences_path = os.path.join(output_dir_base, dataset_name, "initial_active_sequences.json")
-            initial_batch_output_records_path = os.path.join(output_dir_base, dataset_name, "initial_batch_output_records.json")
+            initial_active_sequences_path = os.path.join(
+                output_dir_base, dataset_name, "initial_active_sequences.json"
+            )
+            initial_batch_output_records_path = os.path.join(
+                output_dir_base, dataset_name, "initial_batch_output_records.json"
+            )
             start_turn = 0
-                        
+
             if os.path.exists(initial_active_sequences_path) and os.path.exists(initial_batch_output_records_path):
-                print(f"Loading initial search status from {initial_active_sequences_path}, {initial_batch_output_records_path}")
+                print(
+                    f"Loading initial search status from {initial_active_sequences_path}, {initial_batch_output_records_path}"
+                )
                 with open(initial_active_sequences_path, "r", encoding="utf-8") as f:
                     active_sequences = json.load(f)
                 with open(initial_batch_output_records_path, "r", encoding="utf-8") as f:
@@ -258,30 +269,34 @@ def main(args: argparse.Namespace):
                         reranked_results, _ = reranker(question, search_results)
                     else:
                         reranked_results = search_results
-                    
+
                     # attend unique hash ids to each webpage
                     initial_search_documents = generate_ref_id(set(), reranked_results)
 
                     batch_initial_search_documents.append(initial_search_documents)
-                
+
                 initial_search_summaries = summarizer(
-                    previous_reasonings=[], # empty list for initial search
+                    previous_reasonings=[],  # empty list for initial search
                     search_queries=questions,
                     documents=batch_initial_search_documents,
                     batch_output_records=batch_output_records,  # Pass the collection list
                 )
 
                 active_sequences, input_list = prepare_input_prompts(
-                    data, max_search_limit, tokenizer, subset_num, batch_initial_search_documents, initial_search_summaries
+                    data,
+                    max_search_limit,
+                    tokenizer,
+                    subset_num,
+                    batch_initial_search_documents,
+                    initial_search_summaries,
                 )
-                
+
                 # save initial active sequences for future use
                 with open(initial_active_sequences_path, "w", encoding="utf-8") as f:
                     json.dump(active_sequences, f, ensure_ascii=False, indent=2)
                 with open(initial_batch_output_records_path, "w", encoding="utf-8") as f:
                     json.dump(batch_output_records, f, ensure_ascii=False, indent=2)
-                
-        
+
         is_rollout_initialized = False
 
         # Initialize collection structure
@@ -330,9 +345,8 @@ def main(args: argparse.Namespace):
 
                     # If a search query is present and the needs to be executed
                     if search_query and seq["output"].rstrip().endswith(END_SEARCH_QUERY):
-                        if (
-                            seq["search_count"] < max_search_limit
-                            and search_query not in set(seq["executed_search_queries"])
+                        if seq["search_count"] < max_search_limit and search_query not in set(
+                            seq["executed_search_queries"]
                         ):
                             try:
                                 print(f'Executing search for query: "{search_query}"')
@@ -346,11 +360,13 @@ def main(args: argparse.Namespace):
                                 reranked_results, _ = reranker(search_query, search_results)
                             else:
                                 reranked_results = search_results
-                            
+
                             # attend unique hash ids to each webpage
                             existing_ids = seq["executed_search_urls"].keys()
                             search_documents = generate_ref_id(existing_ids, reranked_results)
-                            seq["executed_search_urls"].update({ref_id: data["url"] for ref_id, data in search_documents.items()})
+                            seq["executed_search_urls"].update(
+                                {ref_id: data["url"] for ref_id, data in search_documents.items()}
+                            )
 
                             all_reasoning_steps = seq["output"]
                             all_reasoning_steps = all_reasoning_steps.replace("\n\n", "\n").split("\n")

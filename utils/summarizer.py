@@ -26,7 +26,6 @@ class Summarizer:
         batch_output_records: list[dict] | None = None,
         max_retry: int = 10,
     ) -> list[str]:
-
         if len(previous_reasonings) == 0:
             logger.info("Performing initial search summarization...")
             user_prompts = [
@@ -35,7 +34,8 @@ class Summarizer:
         else:
             logger.info("Performing iterative search summarization...")
             user_prompts = [
-                self._generate_summary_prompt(pr, sq, docs) for pr, sq, docs in zip(previous_reasonings, search_queries, documents)
+                self._generate_summary_prompt(pr, sq, docs)
+                for pr, sq, docs in zip(previous_reasonings, search_queries, documents)
             ]
 
         prompts = [{"role": "user", "content": up} for up in user_prompts]
@@ -55,7 +55,7 @@ class Summarizer:
             for i, (res, docs) in enumerate(zip(results, documents)):
                 valid_ids = list(docs.keys())
                 validation = self._validate_citation_format(res, valid_ids)
-                if not validation['is_valid']:
+                if not validation["is_valid"]:
                     invalid_indices.append(i)
                     logger.warning(f"Invalid citation format found in result {i}: {validation['errors']}")
 
@@ -77,8 +77,7 @@ class Summarizer:
                 raw_outputs[idx] = raw
 
             retry_count += 1
-        
-        
+
         if batch_output_records is not None:
             for p, r, e in zip(prompts, raw_outputs, results):
                 batch_output_records.append({"prompt": p, "raw_output": r.outputs[0].text, "extracted_info": e})
@@ -86,37 +85,34 @@ class Summarizer:
         return results
 
     def _validate_citation_format(self, text: str, valid_ids: list[str]) -> dict:
-        results = {
-            'is_valid': True,
-            'errors': [],
-        }
-        
-        citation_pattern = r'\([^)]*#[0-9a-f]{4}[^)]*\)'
+        results = {"is_valid": True, "errors": []}
+
+        citation_pattern = r"\([^)]*#[0-9a-f]{4}[^)]*\)"
         matches = re.finditer(citation_pattern, text)
-        
+
         for match in matches:
             citation = match.group()
             content = citation[1:-1]
 
             # Check if it starts with #
-            if not content.startswith('#'):
-                results['is_valid'] = False
-                results['errors'].append(citation)
+            if not content.startswith("#"):
+                results["is_valid"] = False
+                results["errors"].append(citation)
                 continue
-            
+
             # Check if it matches the allowed pattern
-            allowed_pattern = r'^#[0-9a-f]{4}(,#[0-9a-f]{4})*$'
+            allowed_pattern = r"^#[0-9a-f]{4}(,#[0-9a-f]{4})*$"
             if not re.match(allowed_pattern, content):
-                results['is_valid'] = False
-                results['errors'].append(citation)
+                results["is_valid"] = False
+                results["errors"].append(citation)
                 continue
-            
+
             # Check if each ID is in valid_ids
-            ids = content.split(',')
+            ids = content.split(",")
             for id_str in ids:
                 if id_str not in valid_ids:
-                    results['is_valid'] = False
-                    results['errors'].append(citation)
+                    results["is_valid"] = False
+                    results["errors"].append(citation)
                     break
 
         return results
@@ -141,7 +137,7 @@ class Summarizer:
                 documents_str += json.dumps(document_data, ensure_ascii=False, indent=2) + "\n"
 
         return documents_str
-    
+
     def _generate_summary_prompt(self, prev_reasoning: str, search_query: str, documents: dict) -> str:
         documents_str = self._prepare_documents_str(documents)
 
@@ -189,7 +185,6 @@ You are tasked with reading and analyzing web pages based on the following input
 
 Now you should analyze each web page and find helpful information based on the current search query "{search_query}" and previous reasoning steps.
 """
-
 
     def _generate_initial_search_summary_prompt(self, search_query: str, documents: dict) -> str:
         documents_str = self._prepare_documents_str(documents)
