@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -12,7 +13,7 @@ from search.rerankers import load_reranker
 from search.retrievers import load_retriever
 from utils import extract_between_tags, load_tokenizer, load_vllm_model, run_generation
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
-from utils.prompts import get_qa_instruction, get_task_instruction
+from utils.prompts import get_qa_instruction
 from utils.stage_wise_analysis import stage_wise_analysis
 from utils.summarizer import Summarizer
 
@@ -36,16 +37,20 @@ def load_data(data_path: str) -> list[dict]:
 
 
 def prepare_input_prompts(
-    filtered_data: list[dict], max_search_limit: int, tokenizer: AutoTokenizer, subset_num: int
+    filtered_data: list[dict],
+    max_search_limit: int,
+    tokenizer: AutoTokenizer,
+    subset_num: int,
+    initial_search_documents: list[str],
+    initial_search_summaries: list[str],
 ) -> tuple[list[dict], list[dict]]:
     input_list = []
-    for item in filtered_data:
+    for item, initial_summary in zip(filtered_data, initial_search_summaries):
         question = item["Question"]
 
-        instruction = get_qa_instruction(max_search_limit)
-        user_prompt = get_task_instruction(question)
+        instruction = get_qa_instruction(max_search_limit, question, initial_summary)
 
-        prompt = [{"role": "user", "content": instruction + user_prompt}]
+        prompt = [{"role": "user", "content": instruction}]
         prompt = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
         input_list.append(prompt)
 
@@ -62,29 +67,26 @@ def prepare_input_prompts(
             "finished": False,
             "history": [],
             "search_count": 0,
-            "executed_search_queries": set(),
-            "all_info": [],
+            "executed_search_queries": [],
+            "executed_search_urls": {ref_id: data["url"] for ref_id, data in initial_docs.items()},
+            "all_info": [
+                {"initial_search": {ref_id: data["text"] for ref_id, data in initial_docs.items()}},
+                {"initial_search_webpage_analysis": initial_summary},
+            ],
         }
-        for item, prompt in zip(filtered_data, input_list)
+        for item, prompt, initial_docs, initial_summary in zip(
+            filtered_data, input_list, initial_search_documents, initial_search_summaries
+        )
     ]
 
     return active_sequences, input_list
 
 
 def save_checkpoint(output_dir: str, rollout_id: int, turn: int, active_sequences: list, batch_output_records: list):
-    # Convert sets to lists for JSON serialization
-    serializable_sequences = []
-    for seq in active_sequences:
-        seq_copy = seq.copy()
-        # Convert set to list for JSON serialization
-        seq_copy["executed_search_queries"] = list(seq["executed_search_queries"])
-        serializable_sequences.append(seq_copy)
-
-    # Save checkpoint data to a JSON file
     checkpoint_data = {
         "rollout_id": rollout_id,
         "turn": turn,
-        "active_sequences": serializable_sequences,
+        "active_sequences": active_sequences,
         "batch_output_records": batch_output_records,
         "timestamp": time.time(),
     }
@@ -100,10 +102,6 @@ def load_checkpoint(output_dir: str) -> dict | None:
     if os.path.exists(checkpoint_path):
         with open(checkpoint_path, "r", encoding="utf-8") as f:
             checkpoint_data = json.load(f)
-
-        # Convert lists back to sets after loading
-        for seq in checkpoint_data["active_sequences"]:
-            seq["executed_search_queries"] = set(seq["executed_search_queries"])
 
         print(f"Checkpoint loaded: {checkpoint_path}")
         return checkpoint_data
@@ -122,6 +120,21 @@ def find_last_rollout(output_dir_base: str, dataset_name: str) -> int:
 
     rollout_numbers = [int(d.split("_")[1]) for d in rollout_dirs]
     return max(rollout_numbers)
+
+
+def generate_ref_id(existing_ids: set, reranked_webpages: list[str]) -> str:
+    # Generate a unique hash ID based on the reranked webpages
+    result = {}
+
+    for webpage in reranked_webpages:
+        hash_object = hashlib.md5(webpage.text.encode()).hexdigest()
+        for i in range(len(hash_object) - 3):
+            ref_id = "#" + hash_object[i : i + 4]
+            if ref_id not in existing_ids and ref_id not in result.keys():
+                result[ref_id] = {"text": webpage.text, "url": webpage.url}
+                break
+
+    return result
 
 
 def with_429_retry(func, max_retries=5, initial_wait=5):
@@ -219,12 +232,70 @@ def main(args: argparse.Namespace):
         print(f"\n===================Rollout {rollout_id + 1} of {rollout_num}===================")
 
         if not is_rollout_initialized:
-            active_sequences, input_list = prepare_input_prompts(
-                load_data(data_path), max_search_limit, tokenizer, subset_num
-            )
-            batch_output_records = []
-            start_turn = 0
             output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
+            initial_active_sequences_path = os.path.join(
+                output_dir_base, dataset_name, "initial_active_sequences.json"
+            )
+            initial_batch_output_records_path = os.path.join(
+                output_dir_base, dataset_name, "initial_batch_output_records.json"
+            )
+            start_turn = 0
+
+            if os.path.exists(initial_active_sequences_path) and os.path.exists(initial_batch_output_records_path):
+                print(
+                    f"Loading initial search status from {initial_active_sequences_path}, {initial_batch_output_records_path}"
+                )
+                with open(initial_active_sequences_path, "r", encoding="utf-8") as f:
+                    active_sequences = json.load(f)
+                with open(initial_batch_output_records_path, "r", encoding="utf-8") as f:
+                    batch_output_records = json.load(f)
+            else:
+                batch_output_records = []
+                data = load_data(data_path)
+                questions = [item["Question"] for item in data]
+
+                # perform initial search for all questions
+                batch_initial_search_documents = []
+                for question in questions:
+                    try:
+                        print(f'Executing search for query: "{question}"')
+                        search_results = retriever(question)
+                    except Exception as e:
+                        print(f'Search failed for query "{question}": {e}')
+                        search_results = []
+
+                    if reranker is not None and len(search_results) > 0:
+                        print("Reranking search results")
+                        reranked_results, _ = reranker(question, search_results)
+                    else:
+                        reranked_results = search_results
+
+                    # attend unique hash ids to each webpage
+                    initial_search_documents = generate_ref_id(set(), reranked_results)
+
+                    batch_initial_search_documents.append(initial_search_documents)
+
+                initial_search_summaries = summarizer(
+                    previous_reasonings=[],  # empty list for initial search
+                    search_queries=questions,
+                    documents=batch_initial_search_documents,
+                    batch_output_records=batch_output_records,  # Pass the collection list
+                )
+
+                active_sequences, input_list = prepare_input_prompts(
+                    data,
+                    max_search_limit,
+                    tokenizer,
+                    subset_num,
+                    batch_initial_search_documents,
+                    initial_search_summaries,
+                )
+
+                # save initial active sequences for future use
+                with open(initial_active_sequences_path, "w", encoding="utf-8") as f:
+                    json.dump(active_sequences, f, ensure_ascii=False, indent=2)
+                with open(initial_batch_output_records_path, "w", encoding="utf-8") as f:
+                    json.dump(batch_output_records, f, ensure_ascii=False, indent=2)
 
         is_rollout_initialized = False
 
@@ -274,9 +345,8 @@ def main(args: argparse.Namespace):
 
                     # If a search query is present and the needs to be executed
                     if search_query and seq["output"].rstrip().endswith(END_SEARCH_QUERY):
-                        if (
-                            seq["search_count"] < max_search_limit
-                            and search_query not in seq["executed_search_queries"]
+                        if seq["search_count"] < max_search_limit and search_query not in set(
+                            seq["executed_search_queries"]
                         ):
                             try:
                                 print(f'Executing search for query: "{search_query}"')
@@ -290,6 +360,13 @@ def main(args: argparse.Namespace):
                                 reranked_results, _ = reranker(search_query, search_results)
                             else:
                                 reranked_results = search_results
+
+                            # attend unique hash ids to each webpage
+                            existing_ids = seq["executed_search_urls"].keys()
+                            search_documents = generate_ref_id(existing_ids, reranked_results)
+                            seq["executed_search_urls"].update(
+                                {ref_id: data["url"] for ref_id, data in search_documents.items()}
+                            )
 
                             all_reasoning_steps = seq["output"]
                             all_reasoning_steps = all_reasoning_steps.replace("\n\n", "\n").split("\n")
@@ -320,12 +397,12 @@ def main(args: argparse.Namespace):
                             batch_original_questions.append(seq["item"]["Question"])
                             batch_prev_reasonings.append(truncated_prev_reasoning)
                             batch_search_queries.append(search_query)
-                            batch_documents.append(reranked_results)
+                            batch_documents.append(search_documents)
                             batch_sequences.append(seq)
 
                             # Update search count and executed queries
                             seq["search_count"] += 1
-                            seq["executed_search_queries"].add(search_query)
+                            seq["executed_search_queries"].append(search_query)
 
                         elif seq["search_count"] >= max_search_limit:
                             limit_message = f"\n{BEGIN_SEARCH_RESULT}\nThe maximum search limit is exceeded. You are not allowed to search.\n{END_SEARCH_RESULT}\n"
@@ -335,7 +412,7 @@ def main(args: argparse.Namespace):
                             seq["all_info"].append({f"turn_{turn}_search_limited": limit_message})
                             print(f'Search limit reached for query: "{search_query}"')
 
-                        elif search_query in seq["executed_search_queries"]:
+                        elif search_query in set(seq["executed_search_queries"]):
                             limit_message = f"\n{BEGIN_SEARCH_RESULT}\nYou have searched this query. Please refer to previous results.\n{END_SEARCH_RESULT}\n"
                             seq["prompt"] += limit_message
                             seq["output"] += limit_message
@@ -367,8 +444,8 @@ def main(args: argparse.Namespace):
                         seq["history"].append(append_text)
                         seq["all_info"].extend(
                             [
-                                {f"turn_{turn}_search": [doc.text for doc in documents]},
-                                {f"turn_{turn}_webpage_analyses": analysis},
+                                {f"turn_{turn}_search": {ref_id: data["text"] for ref_id, data in documents.items()}},
+                                {f"turn_{turn}_webpage_analysis": analysis},
                             ]
                         )
 
@@ -381,6 +458,7 @@ def main(args: argparse.Namespace):
                     "finished": ele["finished"],
                     "history": ele["history"],
                     "search_count": ele["search_count"],
+                    "executed_search_urls": ele["executed_search_urls"],
                     "all_info": ele["all_info"],
                 }
                 for ele in active_sequences
@@ -463,8 +541,6 @@ if __name__ == "__main__":
     parser.add_argument("--top_k_sampling", type=int, default=40, help="Top-k sampling parameter.")
 
     parser.add_argument("--max_tokens", type=int, default=20480, help="Maximum number of tokens to generate.")
-
-    parser.add_argument("--cache_dir_base", type=str, required=True, help="cache path.")
 
     parser.add_argument("--output_dir_base", type=str, required=True, help="output_dir")
 
