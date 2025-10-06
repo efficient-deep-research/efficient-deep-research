@@ -9,15 +9,12 @@
 set -euxo pipefail
 
 # =========== Path setup ===========
-GROUP_NAME=""
-TRAINING_DIR=$HOME/efficient-deep-research/training
-
-SIF_PATH="$TRAINING_DIR/container/ms-swift_container.sif"
+source $PBS_O_WORKDIR/scripts/config.sh
 SINGULARITYENV_MASTER_PORT=$((29500 + RANDOM % 1000))
 # ==================================
 
 singularity exec --nv \
                  --writable-tmpfs \
                  --bind /groups/$GROUP_NAME/share:/groups/$GROUP_NAME/share \
-                 $SIF_PATH \
-                 python $TRAINING_DIR/src/download_model.py
+                 $PBS_O_WORKDIR/container/$SIF_NAME \
+                 python $PBS_O_WORKDIR/src/download_model.py

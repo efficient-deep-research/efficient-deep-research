@@ -8,12 +8,9 @@
 
 set -euxo pipefail
 
-# ========== 基本パス ==========
-TRAINING_DIR=$HOME/efficient-deep-research/training
-CONTAINER_DIR="$TRAINING_DIR/container"
-DEF_FILE="ms-swift_container.def"
-SIF_FILE="ms-swift_container.sif"
+# ========== setup ==========
+source $PBS_O_WORKDIR/scripts/config.sh
+CONTAINER_DIR="$PBS_O_WORKDIR/container"
 
-# ========== コンテナビルド ==========
-mkdir -p $CONTAINER_DIR
-singularity build --fakeroot "$CONTAINER_DIR/$SIF_FILE" "$CONTAINER_DIR/$DEF_FILE"
+# ========== build container ==========
+singularity build --fakeroot "$CONTAINER_DIR/$SIF_NAME" "$CONTAINER_DIR/$DEF_NAME"

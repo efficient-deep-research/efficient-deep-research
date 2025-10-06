@@ -1,5 +1,5 @@
 {
-  "rlhf_type": "simpo",
+  "rlhf_type": "dpo",
   "train_type": "full",
   "model": "Qwen/Qwen3-Next-80B-A3B-Thinking",
   "dataset": "hjh0119/shareAI-Llama3-DPO-zh-en-emoji",
@@ -17,5 +17,6 @@
   "max_length": 2048,
   "warmup_ratio": 0.05,
   "dataloader_num_workers": 4,
-  "dataset_num_proc": 4
+  "dataset_num_proc": 4,
+  "run_name": "base"
 }
