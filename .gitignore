@@ -24,6 +24,9 @@ synthesized_dataset/output/
 synthesized_dataset/deepresearchgym/
 original_datasets/deepresearchgym
 original_datasets/dataset_for_dpo/
+synthesized_dataset/validation_set_300/
+synthesized_dataset/researchy_questions_top3700/
+synthesized_dataset/natural_question_random_1000/
 
 # job script
 job.sh

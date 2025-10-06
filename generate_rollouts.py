@@ -255,31 +255,43 @@ def main(args: argparse.Namespace):
                 questions = [item["Question"] for item in data]
 
                 # perform initial search for all questions
-                batch_initial_search_documents = []
-                for question in questions:
-                    try:
-                        print(f'Executing search for query: "{question}"')
-                        search_results = retriever(question)
-                    except Exception as e:
-                        print(f'Search failed for query "{question}": {e}')
-                        search_results = []
+                batch_initial_search_documents_path = os.path.join(
+                    output_dir_base, dataset_name, f"batch_initial_search_documents.json"
+                )
+                if os.path.exists(batch_initial_search_documents_path):
+                    print(f"Loading initial search documents from {batch_initial_search_documents_path}")
+                    with open(batch_initial_search_documents_path, "r", encoding="utf-8") as f:
+                        batch_initial_search_documents = json.load(f)
+                else:
+                    batch_initial_search_documents = []
+                    for question in questions:
+                        try:
+                            print(f'Executing search for query: "{question}"')
+                            search_results = retriever(question)
+                        except Exception as e:
+                            print(f'Search failed for query "{question}": {e}')
+                            search_results = []
 
-                    if reranker is not None and len(search_results) > 0:
-                        print("Reranking search results")
-                        reranked_results, _ = reranker(question, search_results)
-                    else:
-                        reranked_results = search_results
+                        if reranker is not None and len(search_results) > 0:
+                            print("Reranking search results")
+                            reranked_results, _ = reranker(question, search_results)
+                        else:
+                            reranked_results = search_results
 
-                    # attend unique hash ids to each webpage
-                    initial_search_documents = generate_ref_id(set(), reranked_results)
+                        # attend unique hash ids to each webpage
+                        initial_search_documents = generate_ref_id(set(), reranked_results)
 
-                    batch_initial_search_documents.append(initial_search_documents)
+                        batch_initial_search_documents.append(initial_search_documents)
+                    
+                    with open(batch_initial_search_documents_path, "w", encoding="utf-8") as f:
+                        json.dump(batch_initial_search_documents, f, ensure_ascii=False, indent=2)
 
                 initial_search_summaries = summarizer(
                     previous_reasonings=[],  # empty list for initial search
                     search_queries=questions,
                     documents=batch_initial_search_documents,
                     batch_output_records=batch_output_records,  # Pass the collection list
+                    max_retry=20,
                 )
 
                 active_sequences, input_list = prepare_input_prompts(
