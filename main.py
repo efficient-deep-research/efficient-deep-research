@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import re
@@ -15,7 +16,7 @@ from search.rerankers import load_reranker
 from search.retrievers import load_retriever
 from utils import extract_between_tags, load_tokenizer
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
-from utils.prompts import get_qa_instruction, get_task_instruction
+from utils.prompts import get_qa_instruction
 from utils.summarizer import Summarizer
 
 
@@ -73,8 +74,18 @@ class OpenAISummarizer(Summarizer):
         self.client = client
         self.model = model
 
-    def __call__(self, previous_reasoning: str, search_query: str, documents: list[Document]) -> str:
-        prompt = self._generate_prompt(previous_reasoning, search_query, documents)
+    def __call__(
+        self,
+        previous_reasoning: str | None,
+        search_query: str,
+        documents: dict[str, dict[str, str]],
+        max_retry: int = 10,
+    ) -> str:
+        if previous_reasoning is None:
+            prompt = self._generate_initial_search_summary_prompt(search_query, documents)
+        else:
+            prompt = self._generate_summary_prompt(previous_reasoning, search_query, documents)
+
         messages = [{"role": "user", "content": prompt}]
 
         raw_output = self.client.chat.completions.create(
@@ -87,6 +98,22 @@ class OpenAISummarizer(Summarizer):
         )
 
         result = self._parse_result(raw_output.choices[0].message.content)
+
+        for _ in range(max_retry):
+            valid_ids = list(documents.keys())
+            validation = self._validate_citation_format(result, valid_ids)
+            if validation["is_valid"]:
+                break
+
+            retry_raw_output = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=self.max_tokens,
+                stop=None,
+                temperature=self.temperature,
+                top_p=self.top_p,
+            )
+            result = self._parse_result(retry_raw_output.choices[0].message.content)
 
         return result
 
@@ -160,15 +187,45 @@ def extract_final_answer(output: str) -> str:
     return ""
 
 
+def generate_ref_id(existing_ids: set, reranked_webpages: list[Document]) -> dict[str, dict[str, str]]:
+    result = {}
+
+    for webpage in reranked_webpages:
+        hash_object = hashlib.md5(webpage.text.encode()).hexdigest()
+        for i in range(len(hash_object) - 3):
+            ref_id = "#" + hash_object[i : i + 4]
+            if ref_id not in existing_ids and ref_id not in result.keys():
+                result[ref_id] = {"text": webpage.text, "url": webpage.url}
+                break
+
+    return result
+
+
 def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
-    instruction = get_qa_instruction(max_search_limit)
-    user_prompt = get_task_instruction(question)
-    prompt = [{"role": "user", "content": instruction + user_prompt}]
+    try:
+        search_results = retriever(question)
+    except Exception:
+        search_results = []
+
+    if reranker is not None and len(search_results) > 0:
+        reranked_results, _ = reranker(question, search_results)
+    else:
+        reranked_results = search_results
+
+    initial_search_documents = generate_ref_id(set(), reranked_results)
+
+    initial_search_summary = summarizer(
+        previous_reasoning=None, search_query=question, documents=initial_search_documents
+    )
+
+    instruction = get_qa_instruction(max_search_limit, question, initial_search_summary)
+    prompt = [{"role": "user", "content": instruction}]
     prompt = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
 
     output = ""
     search_count = 0
     executed_search_queries = set()
+    executed_search_urls = {ref_id: data["url"] for ref_id, data in initial_search_documents.items()}
 
     for _ in range(max_turns):
         turn_output = (
@@ -203,6 +260,10 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                 else:
                     reranked_results = search_results
 
+                existing_ids = executed_search_urls.keys()
+                search_documents = generate_ref_id(existing_ids, reranked_results)
+                executed_search_urls.update({ref_id: data["url"] for ref_id, data in search_documents.items()})
+
                 search_count += 1
                 executed_search_queries.add(search_query)
 
@@ -227,7 +288,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                 webpage_summary = summarizer(
                     previous_reasoning="\n\n".join(reasoning_steps),
                     search_query=search_query,
-                    documents=reranked_results,
+                    documents=search_documents,
                 )
 
                 append_text = f"\n\n{BEGIN_SEARCH_RESULT}{webpage_summary}{END_SEARCH_RESULT}\n\n"
