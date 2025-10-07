@@ -3,6 +3,7 @@ import logging
 import re
 
 from vllm import LLM, SamplingParams
+from transformers import AutoTokenizer
 
 from search.data import Document
 
@@ -11,8 +12,19 @@ logger = logging.getLogger(__name__)
 
 
 class Summarizer:
-    def __init__(self, llm: LLM, top_k: int, max_tokens: int = 8192, temperature: float = 0.6, top_p: float = 0.95):
+    def __init__(
+        self,
+        llm: LLM,
+        tokenizer: AutoTokenizer,
+        model_context_length,
+        top_k: int,
+        max_tokens: int = 8192,
+        temperature: float = 0.6,
+        top_p: float = 0.95,
+    ):
         self.llm = llm
+        self.tokenizer = tokenizer
+        self.model_context_length = model_context_length
         self.top_k = top_k
         self.max_tokens = max_tokens
         self.temperature = temperature
@@ -130,11 +142,22 @@ class Summarizer:
 
     def _prepare_documents_str(self, documents: dict) -> str:
         documents_str = ""
+        valid_len_per_doc = int(self.model_context_length * 0.8 / self.top_k)
         for i, (ref_id, data) in enumerate(documents.items()):
-            if i < self.top_k:
-                documents_str += f"Webpage ID: {ref_id}\n"
-                document_data = {"context": data["text"], "url": data["url"]}
-                documents_str += json.dumps(document_data, ensure_ascii=False, indent=2) + "\n"
+            if i >= self.top_k:
+                break
+
+            # token length check
+            tokenized_doc = self.tokenizer(data["text"])["input_ids"]
+            if len(tokenized_doc) > valid_len_per_doc:
+                tokenized_doc = tokenized_doc[:valid_len_per_doc]  # truncate
+                doc_text = self.tokenizer.decode(tokenized_doc, skip_special_tokens=True)
+                logger.info(f"Document {ref_id} is truncated to fit the token limit.")
+            else:
+                doc_text = data["text"]
+            documents_str += f"Webpage ID: {ref_id}\n"
+            document_data = {"context": doc_text, "url": data["url"]}
+            documents_str += json.dumps(document_data, ensure_ascii=False, indent=2) + "\n"
 
         return documents_str
 
