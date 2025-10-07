@@ -74,6 +74,16 @@ class OpenAISummarizer(Summarizer):
         self.client = client
         self.model = model
 
+    @staticmethod
+    def _parse_result(output: str) -> str:
+        split_str = "**Final Information**"
+        if split_str in output:
+            extracted_text = output.split(split_str)[-1].replace("\n", "").strip("```").strip()
+        else:
+            extracted_text = output
+
+        return extracted_text
+
     def __call__(
         self,
         previous_reasoning: str | None,
@@ -201,22 +211,43 @@ def generate_ref_id(existing_ids: set, reranked_webpages: list[Document]) -> dic
     return result
 
 
+def extract_citations(text: str, executed_search_urls: dict[str, str]) -> tuple[dict[str, int], list[str]]:
+    ref_id2idx = {}
+    urls = []
+
+    for match in re.finditer(r"\#[a-f0-9]{4}", text):
+        ref_id = match.group(0)
+        if ref_id in executed_search_urls and ref_id not in ref_id2idx:
+            ref_id2idx[ref_id] = len(ref_id2idx)
+            urls.append(executed_search_urls[ref_id])
+
+    return ref_id2idx, urls
+
+
 def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
+    print(f"Processing question: {question}")
+
+    print("Performing initial search...")
     try:
         search_results = retriever(question)
+        print(f"Retrieved {len(search_results)} documents.")
     except Exception:
         search_results = []
+        print("Retriever failed. Proceeding with zero documents.")
 
     if reranker is not None and len(search_results) > 0:
+        print("Reranking search results...")
         reranked_results, _ = reranker(question, search_results)
+        print(f"Reranked {len(reranked_results)} documents.")
     else:
         reranked_results = search_results
 
+    print("Generating initial search summary...")
     initial_search_documents = generate_ref_id(set(), reranked_results)
-
     initial_search_summary = summarizer(
         previous_reasoning=None, search_query=question, documents=initial_search_documents
     )
+    print("Initial search summary generated.")
 
     instruction = get_qa_instruction(max_search_limit, question, initial_search_summary)
     prompt = [{"role": "user", "content": instruction}]
@@ -227,7 +258,11 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
     executed_search_queries = set()
     executed_search_urls = {ref_id: data["url"] for ref_id, data in initial_search_documents.items()}
 
-    for _ in range(max_turns):
+    for turn in range(max_turns):
+        print(f"Starting turn {turn + 1}...")
+
+        print("Generating response...")
+        print(f"Prompt: {prompt + output}")
         turn_output = (
             run_generation_openai(
                 prompt=prompt + output,
@@ -243,6 +278,8 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
             .choices[0]
             .text
         )
+        print("Response generated.")
+        print(f"Output: {turn_output}")
 
         output += turn_output
 
@@ -250,13 +287,18 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
 
         if search_query and output.rstrip().endswith(END_SEARCH_QUERY):
             if search_count < max_search_limit and search_query not in executed_search_queries:
+                print(f"Performing search {search_count + 1} with query: {search_query}")
                 try:
                     search_results = retriever(search_query)
+                    print(f"Retrieved {len(search_results)} documents.")
                 except Exception:
                     search_results = []
+                    print("Retriever failed. Proceeding with zero documents.")
 
                 if reranker is not None and len(search_results) > 0:
+                    print("Reranking search results...")
                     reranked_results, _ = reranker(search_query, search_results)
+                    print(f"Reranked {len(reranked_results)} documents.")
                 else:
                     reranked_results = search_results
 
@@ -285,11 +327,14 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                         elif reasoning_steps[-1] != "...":
                             reasoning_steps.append("...")
 
+                print("Generating search summary...")
                 webpage_summary = summarizer(
                     previous_reasoning="\n\n".join(reasoning_steps),
                     search_query=search_query,
                     documents=search_documents,
                 )
+                print("Search summary generated.")
+                print(f"Summarizer output: {webpage_summary}")
 
                 append_text = f"\n\n{BEGIN_SEARCH_RESULT}{webpage_summary}{END_SEARCH_RESULT}\n\n"
                 output += append_text
@@ -301,28 +346,49 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                 limit_message = f"\n{BEGIN_SEARCH_RESULT}\nYou have searched this query. Please refer to previous results.\n{END_SEARCH_RESULT}\n"
                 output += limit_message
 
+            intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
+            ref_id2idx, urls = extract_citations(intermediate_steps, executed_search_urls)
+            for ref_id, idx in ref_id2idx.items():
+                intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
+
             yield {
-                "intermediate_steps": "|||---|||".join(output.replace("\n\n", "\n").split("\n")),
+                "intermediate_steps": intermediate_steps,
                 "final_report": None,
                 "is_intermediate": True,
                 "complete": False,
+                "citations": urls,
             }
         else:
+            intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
+            ref_id2idx, urls = extract_citations(intermediate_steps, executed_search_urls)
+            for ref_id, idx in ref_id2idx.items():
+                intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
+
             yield {
-                "intermediate_steps": "|||---|||".join(output.replace("\n\n", "\n").split("\n")),
+                "intermediate_steps": intermediate_steps,
                 "final_report": None,
                 "is_intermediate": False,
                 "complete": False,
+                "citations": urls,
             }
             break
 
     final_report = extract_final_answer(output)
 
+    intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
+    ref_id2idx, urls = extract_citations(intermediate_steps + final_report, executed_search_urls)
+    for ref_id, idx in ref_id2idx.items():
+        intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
+        final_report = final_report.replace(ref_id, f"[{idx + 1}]")
+
+    print(f"Final report: {final_report}")
+
     yield {
-        "intermediate_steps": "|||---|||".join(output.replace("\n\n", "\n").split("\n")),
+        "intermediate_steps": intermediate_steps,
         "final_report": final_report,
         "is_intermediate": False,
         "complete": True,
+        "citations": urls,
     }
 
 
