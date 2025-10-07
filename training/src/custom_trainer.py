@@ -11,11 +11,15 @@ class SearchResultMaskDPOTrainer(DPOTrainer):
         super().__init__(*args, **kwargs)
         self.begin_search_result_ids = [
             torch.tensor(self.tokenizer("<|begin_search_result|>")["input_ids"]),
+            torch.tensor(self.tokenizer(" <|begin_search_result|>")["input_ids"]),
             torch.tensor(self.tokenizer("<|begin_search_result|>-")["input_ids"]),
+            torch.tensor(self.tokenizer(" <|begin_search_result|>-")["input_ids"]),
         ]
         self.end_search_result_ids = [
             torch.tensor(self.tokenizer("<|end_search_result|>")["input_ids"]),
+            torch.tensor(self.tokenizer(" <|end_search_result|>")["input_ids"]),
             torch.tensor(self.tokenizer("<|end_search_result|>\n\n")["input_ids"]),
+            torch.tensor(self.tokenizer(" <|end_search_result|>\n\n")["input_ids"]),
             torch.tensor(self.tokenizer(".<|end_search_result|>\n\n")["input_ids"]),
             torch.tensor(self.tokenizer('."<|end_search_result|>\n\n')["input_ids"]),
             torch.tensor(self.tokenizer(")<|end_search_result|>\n\n")["input_ids"]),
