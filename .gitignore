@@ -33,3 +33,5 @@ cache/
 
 .vscode/
 scratch/
+.env
+.history/
