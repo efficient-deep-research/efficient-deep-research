@@ -1,7 +1,8 @@
 #!/bin/bash
 #PBS -q rt_HF
 #PBS -l select=1
-#PBS -l walltime=3:00:00
+#PBS -l walltime=1:00:00
+#PBS -P gcd50664
 #PBS -k oe
 #PBS -N run_DPO
 #PBS -m abe
