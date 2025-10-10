@@ -31,7 +31,12 @@ job.sh
 # cache directory
 cache/
 
+# training workspace for container mounts
+training/workspace/
+
 .vscode/
 scratch/
 .env
 .history/
+*.sif
+download/

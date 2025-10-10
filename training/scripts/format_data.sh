@@ -11,7 +11,7 @@ set -euxo pipefail
 # ========== 基本パス ==========
 source $PBS_O_WORKDIR/scripts/config.sh
 
-DATASET_NAME="DeepResearchGym Preferences.jsonl"
+DATASET_NAME="preference_data.jsonl"
 OUTPUT_NAME="preferences_data_example1000.jsonl"
 
 singularity exec \

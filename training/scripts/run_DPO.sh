@@ -12,7 +12,11 @@ set -euxo pipefail
 source $PBS_O_WORKDIR/scripts/config.sh
 
 # ========== wandb ==========
-mkdir -p "$SINGULARITYENV_WANDB_DIR"
+export WANDB_PROJECT="efficient-deep-research"
+export WANDB_NAME="$PBS_JOBID"
+
+# ========== dataset ==========
+DATASET_NAME="preferences_data_example1000.jsonl"
 
 # ========== ログ ==========
 LOG_FILE="$LOG_DIR/$PBS_JOBID.log"
@@ -24,10 +28,11 @@ trap 'echo "Error at line $LINENO, exit status $?"' ERR
 readarray -t TRAIN_ARGS < <(
   jq -r 'to_entries[] | "--\(.key)\n\(.value)"' "$CONFIG_FILE"
 )
-TRAIN_ARGS+=(--output_dir "$OUTPUT_DIR" --report_to wandb)
+TRAIN_ARGS+=(--output_dir "$OUTPUT_DIR" --report_to wandb --dataset "$PBS_O_WORKDIR/data/$DATASET_NAME" --use_hf true)
 
 # ========== 実行 ==========
 mkdir -p "$OUTPUT_DIR"
+mkdir -p "$PBS_O_WORKDIR/download"
 echo "Output directory: $OUTPUT_DIR"
 echo "Log file: $LOG_FILE"
 nvidia-smi
@@ -36,6 +41,6 @@ singularity exec \
     --nv \
     --network host \
     --writable-tmpfs \
-    --bind /groups/$GROUP_NAME/share:/groups/$GROUP_NAME/share \
+    --bind $PBS_O_WORKDIR/download:/mnt/workspace \
     "$PBS_O_WORKDIR/container/$SIF_NAME" \
     python $PBS_O_WORKDIR/src/train_DPO.py "${TRAIN_ARGS[@]}"

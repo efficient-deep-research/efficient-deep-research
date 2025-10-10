@@ -15,6 +15,6 @@ SINGULARITYENV_MASTER_PORT=$((29500 + RANDOM % 1000))
 
 singularity exec --nv \
                  --writable-tmpfs \
-                 --bind /groups/$GROUP_NAME/share:/groups/$GROUP_NAME/share \
+                 --bind $PBS_O_WORKDIR/download:/mnt/workspace \
                  $PBS_O_WORKDIR/container/$SIF_NAME \
                  python $PBS_O_WORKDIR/src/download_model.py

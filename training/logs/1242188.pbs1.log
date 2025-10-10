@@ -1,0 +1,2102 @@
++ trap 'echo "Error at line $LINENO, exit status $?"' ERR
++ readarray -t TRAIN_ARGS
+++ jq -r 'to_entries[] | "--\(.key)\n\(.value)"' /home/ace14492mh/efficient-deep-research/training/configs/base.json
++ TRAIN_ARGS+=(--output_dir "$OUTPUT_DIR" --report_to wandb --dataset "$PBS_O_WORKDIR/data/$DATASET_NAME")
++ mkdir -p /home/ace14492mh/efficient-deep-research/training/output/1242188.pbs1
++ echo 'Output directory: /home/ace14492mh/efficient-deep-research/training/output/1242188.pbs1'
+Output directory: /home/ace14492mh/efficient-deep-research/training/output/1242188.pbs1
++ echo 'Log file: /home/ace14492mh/efficient-deep-research/training/logs/1242188.pbs1.log'
+Log file: /home/ace14492mh/efficient-deep-research/training/logs/1242188.pbs1.log
++ nvidia-smi
+Fri Oct 10 14:14:44 2025       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.124.06             Driver Version: 570.124.06     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H200                    On  |   00000000:87:00.0 Off |                    0 |
+| N/A   46C    P0             82W /  500W |       1MiB / 143771MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
++ singularity exec --nv --network host --writable-tmpfs --bind /groups/gcd50664/share:/groups/gcd50664/share --bind /groups/gcd50664/share/.cache/modelscope:/mnt/workspace /home/ace14492mh/efficient-deep-research/training/container/ms-swift_container.sif python /home/ace14492mh/efficient-deep-research/training/src/train_DPO.py --rlhf_type dpo --train_type full --model Qwen/Qwen3-Next-80B-A3B-Thinking --dataset hjh0119/shareAI-Llama3-DPO-zh-en-emoji --split_dataset_ratio 0.01 --torch_dtype bfloat16 --num_train_epochs 1 --per_device_train_batch_size 1 --per_device_eval_batch_size 1 --learning_rate 0.00001 --gradient_accumulation_steps 16 --eval_steps 100 --save_steps 100 --save_total_limit 2 --logging_steps 5 --max_length 2048 --warmup_ratio 0.05 --dataloader_num_workers 4 --dataset_num_proc 4 --run_name base --output_dir /home/ace14492mh/efficient-deep-research/training/output/1242188.pbs1 --report_to wandb --dataset /home/ace14492mh/efficient-deep-research/training/data/preferences_data_example1000.jsonl
+INFO:    Setting 'NVIDIA_VISIBLE_DEVICES=all' to emulate legacy GPU binding.
+/usr/local/lib/python3.11/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[INFO:swift] Successfully registered `/usr/local/lib/python3.11/site-packages/swift/llm/dataset/data/dataset_info.json`.
+[INFO:swift] rank: -1, local_rank: -1, world_size: 1, local_world_size: 1
+Traceback (most recent call last):
+  File "/home/ace14492mh/efficient-deep-research/training/src/train_DPO.py", line 6, in <module>
+    rlhf_main()
+  File "/usr/local/lib/python3.11/site-packages/swift/llm/train/rlhf.py", line 217, in rlhf_main
+    return SwiftRLHF(args).main()
+           ^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/swift/llm/train/sft.py", line 27, in __init__
+    super().__init__(args)
+  File "/usr/local/lib/python3.11/site-packages/swift/llm/base.py", line 19, in __init__
+    self.args = self._parse_args(args)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/swift/llm/base.py", line 31, in _parse_args
+    args, remaining_argv = parse_args(self.args_class, args)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/swift/utils/utils.py", line 153, in parse_args
+    args, remaining_args = parser.parse_args_into_dataclasses(argv, return_remaining_strings=True)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/transformers/hf_argparser.py", line 345, in parse_args_into_dataclasses
+    obj = dtype(**inputs)
+          ^^^^^^^^^^^^^^^
+  File "<string>", line 443, in __init__
+  File "/usr/local/lib/python3.11/site-packages/swift/llm/argument/rlhf_args.py", line 135, in __post_init__
+    TrainArguments.__post_init__(self)
+  File "/usr/local/lib/python3.11/site-packages/swift/llm/argument/train_args.py", line 152, in __post_init__
+    BaseArguments.__post_init__(self)
+  File "/usr/local/lib/python3.11/site-packages/swift/llm/argument/base_args/base_args.py", line 172, in __post_init__
+    ModelArguments.__post_init__(self)
+  File "/usr/local/lib/python3.11/site-packages/swift/llm/argument/base_args/model_args.py", line 185, in __post_init__
+    self._init_torch_dtype()
+  File "/usr/local/lib/python3.11/site-packages/swift/llm/argument/base_args/model_args.py", line 90, in _init_torch_dtype
+    self.torch_dtype: torch.dtype = self._init_model_info()
+                                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/swift/llm/argument/base_args/model_args.py", line 154, in _init_model_info
+    self.model_info, self.model_meta = get_model_info_meta(**self.get_model_kwargs())
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/swift/llm/model/register.py", line 580, in get_model_info_meta
+    model_dir = safe_snapshot_download(
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/swift/llm/model/utils.py", line 307, in safe_snapshot_download
+    with safe_ddp_context(hash_id=model_id_or_path):
+  File "/usr/local/lib/python3.11/contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/swift/utils/torch_utils.py", line 298, in safe_ddp_context
+    os.makedirs(lock_dir, exist_ok=True)
+  File "<frozen os>", line 215, in makedirs
+  File "<frozen os>", line 215, in makedirs
+  File "<frozen os>", line 215, in makedirs
+  File "<frozen os>", line 225, in makedirs
+PermissionError: [Errno 13] Permission denied: '/mnt/workspace/.cache'
+++ echo 'Error at line 40, exit status 1'
+Error at line 40, exit status 1
++ trap 'echo "Error at line $LINENO, exit status $?"' ERR
++ readarray -t TRAIN_ARGS
+++ jq -r 'to_entries[] | "--\(.key)\n\(.value)"' /home/ace14492mh/efficient-deep-research/training/configs/base.json
++ TRAIN_ARGS+=(--output_dir "$OUTPUT_DIR" --report_to wandb --dataset "$PBS_O_WORKDIR/data/$DATASET_NAME")
++ mkdir -p /home/ace14492mh/efficient-deep-research/training/output/1242188.pbs1
++ echo 'Output directory: /home/ace14492mh/efficient-deep-research/training/output/1242188.pbs1'
+Output directory: /home/ace14492mh/efficient-deep-research/training/output/1242188.pbs1
++ echo 'Log file: /home/ace14492mh/efficient-deep-research/training/logs/1242188.pbs1.log'
+Log file: /home/ace14492mh/efficient-deep-research/training/logs/1242188.pbs1.log
++ nvidia-smi
+Fri Oct 10 14:19:14 2025       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.124.06             Driver Version: 570.124.06     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H200                    On  |   00000000:87:00.0 Off |                    0 |
+| N/A   45C    P0             82W /  500W |       1MiB / 143771MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
++ singularity exec --nv --network host --writable-tmpfs --bind /groups/gcd50664/share:/groups/gcd50664/share --bind /groups/gcd50664/share/.cache/:/mnt/workspace /home/ace14492mh/efficient-deep-research/training/container/ms-swift_container.sif python /home/ace14492mh/efficient-deep-research/training/src/train_DPO.py --rlhf_type dpo --train_type full --model Qwen/Qwen3-Next-80B-A3B-Thinking --dataset hjh0119/shareAI-Llama3-DPO-zh-en-emoji --split_dataset_ratio 0.01 --torch_dtype bfloat16 --num_train_epochs 1 --per_device_train_batch_size 1 --per_device_eval_batch_size 1 --learning_rate 0.00001 --gradient_accumulation_steps 16 --eval_steps 100 --save_steps 100 --save_total_limit 2 --logging_steps 5 --max_length 2048 --warmup_ratio 0.05 --dataloader_num_workers 4 --dataset_num_proc 4 --run_name base --output_dir /home/ace14492mh/efficient-deep-research/training/output/1242188.pbs1 --report_to wandb --dataset /home/ace14492mh/efficient-deep-research/training/data/preferences_data_example1000.jsonl
+INFO:    Setting 'NVIDIA_VISIBLE_DEVICES=all' to emulate legacy GPU binding.
+/usr/local/lib/python3.11/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[INFO:swift] Successfully registered `/usr/local/lib/python3.11/site-packages/swift/llm/dataset/data/dataset_info.json`.
+[INFO:swift] rank: -1, local_rank: -1, world_size: 1, local_world_size: 1
+[INFO:swift] Downloading the model from ModelScope Hub, model_id: Qwen/Qwen3-Next-80B-A3B-Thinking
+[INFO:modelscope] Got 10 files, start to download ...
+Downloading Model from https://www.modelscope.cn to directory: /mnt/workspace/.cache/modelscope/hub/models/Qwen/Qwen3-Next-80B-A3B-Thinking
+Processing 10 items:   0%|          | 0.00/10.0 [00:00<?, ?it/s]
+Downloading [config.json]:   0%|          | 0.00/1.13k [00:00<?, ?B/s][A
+
+Downloading [configuration.json]:   0%|          | 0.00/73.0 [00:00<?, ?B/s][A[A
+
+
+Downloading [generation_config.json]:   0%|          | 0.00/222 [00:00<?, ?B/s][A[A[A
+
+
+
+Downloading [LICENSE]:   0%|          | 0.00/11.1k [00:00<?, ?B/s][A[A[A[A
+
+
+
+
+Downloading [merges.txt]:   0%|          | 0.00/1.59M [00:00<?, ?B/s][A[A[A[A[A
+
+
+
+
+
+Downloading [model.safetensors.index.json]:   0%|          | 0.00/6.87M [00:00<?, ?B/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [README.md]:   0%|          | 0.00/17.5k [00:00<?, ?B/s][A[A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:   0%|          | 0.00/10.9M [00:00<?, ?B/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [README.md]:  22%|██▏       | 3.81k/17.5k [00:02<00:07, 1.94kB/s][A[A[A[A[A[A[ADownloading [README.md]: 100%|██████████| 17.5k/17.5k [00:02<00:00, 8.93kB/s]
+
+
+
+
+
+
+
+Downloading [tokenizer_config.json]:   0%|          | 0.00/10.6k [00:00<?, ?B/s][A[A[A[A[A[A[AProcessing 10 items:  10%|█         | 1.00/10.0 [00:02<00:18, 2.04s/it]
+
+Downloading [configuration.json]: 100%|██████████| 73.0/73.0 [00:02<00:00, 34.2B/s][A[ADownloading [configuration.json]: 100%|██████████| 73.0/73.0 [00:02<00:00, 34.2B/s]
+
+
+Downloading [vocab.json]:   0%|          | 0.00/2.65M [00:00<?, ?B/s][A[AProcessing 10 items:  20%|██        | 2.00/10.0 [00:02<00:07, 1.11it/s]
+
+
+
+
+
+Downloading [model.safetensors.index.json]:   0%|          | 3.80k/6.87M [00:02<1:07:46, 1.77kB/s][A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:   0%|          | 3.80k/10.9M [00:02<1:51:00, 1.71kB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model.safetensors.index.json]:   1%|          | 43.8k/6.87M [00:02<04:30, 26.4kB/s]  [A[A[A[A[A[A
+
+
+Downloading [generation_config.json]: 100%|██████████| 222/222 [00:02<00:00, 94.1B/s][A[A[A
+Downloading [config.json]: 100%|██████████| 1.13k/1.13k [00:02<00:00, 488B/s][ADownloading [generation_config.json]: 100%|██████████| 222/222 [00:02<00:00, 94.0B/s]
+Downloading [config.json]: 100%|██████████| 1.13k/1.13k [00:02<00:00, 487B/s]
+Processing 10 items:  30%|███       | 3.00/10.0 [00:02<00:04, 1.68it/s]
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:   0%|          | 43.8k/10.9M [00:02<07:24, 25.6kB/s]  [A[A[A[A[A[A[A[A
+
+
+
+Downloading [LICENSE]:  34%|███▍      | 3.81k/11.1k [00:02<00:04, 1.61kB/s][A[A[A[ADownloading [LICENSE]: 100%|██████████| 11.1k/11.1k [00:02<00:00, 4.67kB/s]
+
+
+
+
+
+
+Downloading [model.safetensors.index.json]:   9%|▉         | 640k/6.87M [00:02<00:13, 503kB/s]  [A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:   1%|          | 124k/10.9M [00:02<02:12, 85.5kB/s] [A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model.safetensors.index.json]:  18%|█▊        | 1.23M/6.87M [00:02<00:05, 1.08MB/s][A[A[A[A[A[A
+
+
+
+
+Downloading [merges.txt]:   0%|          | 3.80k/1.59M [00:02<18:48, 1.48kB/s][A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:   2%|▏         | 212k/10.9M [00:02<01:09, 162kB/s] [A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model.safetensors.index.json]:  35%|███▍      | 2.38M/6.87M [00:02<00:01, 2.40MB/s][A[A[A[A[A[A
+
+
+
+
+Downloading [merges.txt]:   1%|▏         | 23.8k/1.59M [00:02<02:19, 11.8kB/s][A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:   3%|▎         | 300k/10.9M [00:02<00:45, 245kB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model.safetensors.index.json]:  69%|██████▉   | 4.75M/6.87M [00:02<00:00, 5.60MB/s][A[A[A[A[A[ADownloading [model.safetensors.index.json]: 100%|██████████| 6.87M/6.87M [00:02<00:00, 2.56MB/s]
+Processing 10 items:  60%|██████    | 6.00/10.0 [00:02<00:01, 3.30it/s]
+
+
+
+
+Downloading [merges.txt]:   5%|▍         | 75.8k/1.59M [00:02<00:34, 46.5kB/s][A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:   5%|▍         | 532k/10.9M [00:02<00:20, 535kB/s][A[A[A[A[A[A[A[A
+
+
+
+
+Downloading [merges.txt]:   8%|▊         | 132k/1.59M [00:02<00:16, 90.7kB/s] [A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:   7%|▋         | 780k/10.9M [00:02<00:12, 839kB/s][A[A[A[A[A[A[A[A
+
+
+
+
+Downloading [merges.txt]:  12%|█▏        | 188k/1.59M [00:03<00:10, 140kB/s] [A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:   9%|▉         | 0.99M/10.9M [00:03<00:09, 1.08MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+Downloading [merges.txt]:  21%|██        | 344k/1.59M [00:03<00:04, 323kB/s][A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:  16%|█▌        | 1.72M/10.9M [00:03<00:04, 2.33MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [tokenizer_config.json]:  36%|███▌      | 3.81k/10.6k [00:01<00:02, 2.96kB/s][A[A[A[A[A[A[A
+
+Downloading [vocab.json]:   0%|          | 3.80k/2.65M [00:01<14:24, 3.21kB/s][A[ADownloading [tokenizer_config.json]: 100%|██████████| 10.6k/10.6k [00:01<00:00, 8.18kB/s]
+
+
+
+
+
+Downloading [merges.txt]:  40%|████      | 660k/1.59M [00:03<00:01, 751kB/s][A[A[A[A[AProcessing 10 items:  70%|███████   | 7.00/10.0 [00:03<00:01, 2.78it/s]
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:  30%|███       | 3.27M/10.9M [00:03<00:01, 5.14MB/s][A[A[A[A[A[A[A[A
+
+Downloading [vocab.json]:   1%|          | 23.8k/2.65M [00:01<01:53, 24.2kB/s][A[A
+
+
+
+
+Downloading [merges.txt]:  61%|██████    | 0.98M/1.59M [00:03<00:00, 1.19MB/s][A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:  64%|██████▍   | 6.99M/10.9M [00:03<00:00, 12.3MB/s][A[A[A[A[A[A[A[ADownloading [merges.txt]: 100%|██████████| 1.59M/1.59M [00:03<00:00, 475kB/s] 
+Processing 10 items:  80%|████████  | 8.00/10.0 [00:03<00:00, 3.24it/s]
+
+Downloading [vocab.json]:   3%|▎         | 83.8k/2.65M [00:01<00:27, 99.6kB/s][A[A
+
+
+
+
+
+
+
+Downloading [tokenizer.json]:  97%|█████████▋| 10.6M/10.9M [00:03<00:00, 18.4MB/s][A[A[A[A[A[A[A[ADownloading [tokenizer.json]: 100%|██████████| 10.9M/10.9M [00:03<00:00, 3.19MB/s]
+
+
+Downloading [vocab.json]:   5%|▌         | 144k/2.65M [00:01<00:14, 177kB/s]  [A[A
+
+Downloading [vocab.json]:   8%|▊         | 212k/2.65M [00:01<00:09, 265kB/s][A[A
+
+Downloading [vocab.json]:  10%|█         | 276k/2.65M [00:01<00:07, 337kB/s][A[A
+
+Downloading [vocab.json]:  17%|█▋        | 468k/2.65M [00:01<00:03, 681kB/s][A[A
+
+Downloading [vocab.json]:  32%|███▏      | 860k/2.65M [00:01<00:01, 1.43MB/s][A[A
+
+Downloading [vocab.json]:  61%|██████    | 1.61M/2.65M [00:02<00:00, 3.00MB/s][A[ADownloading [vocab.json]: 100%|██████████| 2.65M/2.65M [00:02<00:00, 1.30MB/s]
+Processing 10 items: 100%|██████████| 10.0/10.0 [00:04<00:00, 2.96it/s]Processing 10 items: 100%|██████████| 10.0/10.0 [00:04<00:00, 2.33it/s]
+[INFO:modelscope] Download model 'Qwen/Qwen3-Next-80B-A3B-Thinking' successfully.
+[INFO:swift] Loading the model using model_dir: /mnt/workspace/.cache/modelscope/hub/models/Qwen/Qwen3-Next-80B-A3B-Thinking
+`torch_dtype` is deprecated! Use `dtype` instead!
+[INFO:swift] Setting args.lazy_tokenize: False
+[INFO:swift] output_dir: /home/ace14492mh/efficient-deep-research/training/output/1242188.pbs1/v0-20251010-141939
+[INFO:swift] Global seed set to 42
+[INFO:swift] args: RLHFArguments(
+_n_gpu=-1,
+acc_strategy=token,
+accelerator_config={'dispatch_batches': False},
+adafactor=False,
+adalora_beta1=0.85,
+adalora_beta2=0.85,
+adalora_deltaT=1,
+adalora_init_r=12,
+adalora_orth_reg_weight=0.5,
+adalora_target_r=8,
+adalora_tfinal=0,
+adalora_tinit=0,
+adam_beta1=0.9,
+adam_beta2=0.95,
+adam_epsilon=1e-08,
+adapter_act=gelu,
+adapter_length=128,
+adapters=[],
+add_version=True,
+agent_template=None,
+aligner_lr=None,
+async_generate=False,
+attn_impl=None,
+auto_find_batch_size=False,
+average_tokens_across_devices=True,
+batch_eval_metrics=False,
+beta=0.1,
+bf16=True,
+bf16_full_eval=False,
+bnb_4bit_compute_dtype=torch.bfloat16,
+bnb_4bit_quant_storage=None,
+bnb_4bit_quant_type=nf4,
+bnb_4bit_use_double_quant=True,
+boft_block_num=0,
+boft_block_size=4,
+boft_dropout=0.0,
+boft_n_butterfly_factor=1,
+cached_dataset=[],
+center_rewards_coefficient=None,
+check_model=True,
+chord_enable_phi_function=False,
+chord_mu_decay_steps=None,
+chord_mu_peak=None,
+chord_mu_valley=None,
+chord_mu_warmup_steps=None,
+chord_sft_dataset=[],
+chord_sft_per_device_train_batch_size=None,
+ckpt_dir=None,
+cliprange=0.2,
+cliprange_value=0.2,
+columns={},
+completion_length_limit_scope=per_round,
+cosine_max_len=None,
+cosine_max_len_value_correct=0.5,
+cosine_max_len_value_wrong=0.0,
+cosine_min_len_value_correct=1.0,
+cosine_min_len_value_wrong=-0.5,
+cpo_alpha=1.0,
+create_checkpoint_symlink=False,
+custom_dataset_info=[],
+custom_register_path=[],
+data_parallel_size=None,
+data_seed=42,
+dataloader_drop_last=False,
+dataloader_num_workers=4,
+dataloader_persistent_workers=False,
+dataloader_pin_memory=True,
+dataloader_prefetch_factor=None,
+dataset=['/home/ace14492mh/efficient-deep-research/training/data/preferences_data_example1000.jsonl'],
+dataset_num_proc=4,
+dataset_shuffle=True,
+ddp_backend=None,
+ddp_broadcast_buffers=None,
+ddp_bucket_cap_mb=None,
+ddp_find_unused_parameters=None,
+ddp_timeout=18000000,
+debug=None,
+deepspeed=None,
+deepspeed_autotp_size=None,
+delta=None,
+desirable_weight=1.0,
+device_map=None,
+disable_tqdm=None,
+discopop_tau=0.05,
+do_eval=False,
+do_predict=False,
+do_train=False,
+download_mode=reuse_dataset_if_exists,
+ds3_gather_for_generation=True,
+dynamic_sample=False,
+early_stop_interval=None,
+enable_channel_loss=False,
+enable_dft_loss=False,
+epsilon=0.2,
+epsilon_high=None,
+eval_accumulation_steps=None,
+eval_dataset=[],
+eval_dataset_args=None,
+eval_delay=0,
+eval_do_concat_batches=True,
+eval_generation_config=None,
+eval_limit=None,
+eval_on_start=False,
+eval_steps=100.0,
+eval_strategy=steps,
+eval_use_evalscope=False,
+eval_use_gather_object=False,
+external_plugins=[],
+extra_eval_args=None,
+fourier_n_frequency=2000,
+fourier_scaling=300.0,
+fp16=False,
+fp16_backend=auto,
+fp16_full_eval=False,
+fp16_opt_level=O1,
+freeze_aligner=True,
+freeze_llm=False,
+freeze_parameters=[],
+freeze_parameters_ratio=0.0,
+freeze_parameters_regex=None,
+freeze_vit=True,
+fsdp=[],
+fsdp_config=None,
+fsdp_min_num_params=0,
+fsdp_transformer_layer_cls_to_wrap=None,
+full_determinism=False,
+galore_cos_threshold=0.4,
+galore_gamma_proj=2,
+galore_optim_per_parameter=False,
+galore_proj_bits=4,
+galore_proj_group_size=256,
+galore_proj_quant=False,
+galore_proj_type=std,
+galore_quantization=False,
+galore_queue_size=5,
+galore_rank=128,
+galore_scale=1.0,
+galore_target_modules=None,
+galore_update_proj_gap=50,
+galore_with_embedding=False,
+gamma=1.0,
+gc_collect_after_offload=False,
+generation_batch_size=None,
+generation_config=None,
+generation_max_length=None,
+generation_num_beams=None,
+gpu_memory_utilization=None,
+gradient_accumulation_steps=16,
+gradient_checkpointing=True,
+gradient_checkpointing_kwargs=None,
+greater_is_better=False,
+group_by_length=False,
+half_precision_backend=auto,
+hqq_axis=None,
+hub_always_push=False,
+hub_model_id=None,
+hub_private_repo=None,
+hub_revision=None,
+hub_strategy=every_save,
+hub_token=<HUB_TOKEN>,
+ignore_args_error=False,
+ignore_data_skip=False,
+importance_sampling_level=token,
+include_for_metrics=[],
+include_inputs_for_metrics=False,
+include_num_input_tokens_seen=False,
+include_tokens_per_second=False,
+init_strategy=None,
+init_weights=True,
+interleave_prob=None,
+jit_mode_eval=False,
+kl_coef=0.05,
+label_names=None,
+label_smoothing=0,
+label_smoothing_factor=0.0,
+lam=0.95,
+lazy_tokenize=False,
+ld_alpha=None,
+learning_rate=1e-05,
+length_column_name=length,
+liger_kernel_config=None,
+limit_mm_per_prompt=None,
+lisa_activated_layers=0,
+lisa_step_interval=20,
+llamapro_num_groups=None,
+llamapro_num_new_blocks=4,
+lmbda=0.5,
+load_args=False,
+load_best_model_at_end=False,
+load_data_args=False,
+load_from_cache_file=False,
+local_rank=-1,
+local_repo_path=None,
+local_rollout_forward_batch_size=64,
+log_completions=False,
+log_entropy=False,
+log_level=passive,
+log_level_replica=warning,
+log_on_each_node=True,
+logging_dir=/home/ace14492mh/efficient-deep-research/training/output/1242188.pbs1/v0-20251010-141939/runs,
+logging_first_step=True,
+logging_nan_inf_filter=True,
+logging_steps=5,
+logging_strategy=steps,
+logprobs=False,
+lora_alpha=32,
+lora_bias=none,
+lora_dropout=0.05,
+lora_dtype=None,
+lora_ga_batch_size=2,
+lora_ga_direction=ArB2r,
+lora_ga_iters=2,
+lora_ga_max_length=1024,
+lora_ga_scale=stable,
+lora_ga_stable_gamma=16,
+lora_modules=[],
+lora_rank=8,
+lorap_lr_ratio=None,
+loss_scale=last_round,
+loss_type=sigmoid,
+loss_weights=None,
+lr_scheduler_kwargs=None,
+lr_scheduler_type=cosine,
+max_completion_length=512,
+max_epochs=None,
+max_grad_norm=1.0,
+max_length=2048,
+max_memory={},
+max_model_len=None,
+max_new_tokens=512,
+max_pixels=None,
+max_resample_times=3,
+max_steps=-1,
+max_turns=None,
+metric=None,
+metric_for_best_model=loss,
+missing_eos_penalty=None,
+model=Qwen/Qwen3-Next-80B-A3B-Thinking,
+model_author=None,
+model_kwargs={},
+model_name=None,
+model_revision=None,
+model_type=qwen3_next_thinking,
+modules_to_save=[],
+move_model_batches=None,
+mp_parameters=,
+multi_turn_func=None,
+multi_turn_scheduler=None,
+neftune_noise_alpha=None,
+new_special_tokens=[],
+no_cuda=False,
+norm_bbox=None,
+num_beams=1,
+num_generations=8,
+num_iterations=1,
+num_labels=None,
+num_mini_batches=1,
+num_ppo_epochs=4,
+num_sample_generations=10,
+num_train_epochs=1.0,
+offload_model=False,
+offload_optimizer=False,
+optim=adamw_torch,
+optim_args=None,
+optim_target_modules=None,
+optimizer=None,
+output_dir=/home/ace14492mh/efficient-deep-research/training/output/1242188.pbs1/v0-20251010-141939,
+overlong_filter=False,
+overwrite_output_dir=False,
+packing=False,
+packing_length=None,
+padding_free=False,
+padding_side=right,
+parallelism_config=None,
+past_index=-1,
+per_device_eval_batch_size=1,
+per_device_train_batch_size=1,
+predict_with_generate=False,
+prediction_loss_only=False,
+problem_type=None,
+project=huggingface,
+push_to_hub=False,
+push_to_hub_model_id=None,
+push_to_hub_organization=None,
+push_to_hub_token=<PUSH_TO_HUB_TOKEN>,
+quant_bits=None,
+quant_method=None,
+ray_scope=last,
+ref_adapters=[],
+ref_model=Qwen/Qwen3-Next-80B-A3B-Thinking,
+ref_model_mixup_alpha=0.6,
+ref_model_revision=None,
+ref_model_sync_steps=512,
+ref_model_type=qwen3_next_thinking,
+reft_args=None,
+reft_intervention_type=LoreftIntervention,
+reft_layer_key=None,
+reft_layers=None,
+reft_rank=4,
+remove_unused_columns=True,
+repetition_max_penalty=-1.0,
+repetition_n_grams=3,
+repetition_penalty=1.0,
+report_to=['wandb'],
+response_length=512,
+response_prefix=None,
+restore_callback_states_from_checkpoint=False,
+resume_from_checkpoint=None,
+resume_only_model=False,
+reward_adapters=[],
+reward_funcs=[],
+reward_model=None,
+reward_model_plugin=None,
+reward_model_revision=None,
+reward_model_type=None,
+reward_weights=None,
+rlhf_type=dpo,
+rope_scaling=None,
+router_aux_loss_coef=0.0,
+rpo_alpha=None,
+run_name=base,
+save_on_each_node=False,
+save_only_model=False,
+save_safetensors=True,
+save_steps=100.0,
+save_strategy=steps,
+save_total_limit=2,
+scale_rewards=True,
+seed=42,
+seq_kd=False,
+sequence_parallel_size=1,
+sft_alpha=0,
+shuffle_buffer_size=1000,
+simpo_gamma=1,
+skip_memory_metrics=True,
+sleep_level=0,
+soft_cache_length=None,
+soft_max_length=None,
+sortish_sampler=False,
+split_dataset_ratio=0.01,
+steps_per_generation=None,
+stop_words=[],
+stopping_strategy=first_exhausted,
+stream=False,
+streaming=False,
+strict=False,
+swanlab_exp_name=None,
+swanlab_lark_secret=None,
+swanlab_lark_webhook_url=None,
+swanlab_mode=cloud,
+swanlab_project=None,
+swanlab_token=<SWANLAB_TOKEN>,
+swanlab_workspace=None,
+sync_ref_model=False,
+system=None,
+target_modules=['all-linear'],
+target_parameters=None,
+target_regex=None,
+task_type=causal_lm,
+teacher_adapters=[],
+teacher_model=None,
+teacher_model_revision=None,
+teacher_model_type=None,
+temperature=0.9,
+template=qwen3_thinking,
+template_backend=swift,
+tensor_parallel_size=None,
+tf32=None,
+top_entropy_quantile=1.0,
+top_k=50,
+top_logprobs=None,
+top_p=0.9,
+torch_compile=False,
+torch_compile_backend=None,
+torch_compile_mode=None,
+torch_dtype=torch.bfloat16,
+torch_empty_cache_steps=None,
+torchdynamo=None,
+tpu_metrics_debug=False,
+tpu_num_cores=None,
+trackio_space_id=trackio,
+train_dataloader_shuffle=True,
+train_type=full,
+trainable_parameters=[],
+trainable_parameters_regex=None,
+truncation_strategy=delete,
+tuner_backend=peft,
+undesirable_weight=1.0,
+use_async_engine=None,
+use_chat_template=True,
+use_cpu=False,
+use_dora=False,
+use_flash_ckpt=False,
+use_galore=False,
+use_hf=False,
+use_legacy_prediction_loop=False,
+use_liger_kernel=False,
+use_logits_to_keep=None,
+use_mps_device=False,
+use_rslora=False,
+use_swift_lora=False,
+use_vllm=False,
+val_dataset=[],
+val_dataset_shuffle=False,
+vera_d_initial=0.1,
+vera_dropout=0.0,
+vera_projection_prng_key=0,
+vera_rank=256,
+vf_coef=0.1,
+vit_gradient_checkpointing=None,
+vit_lr=None,
+vllm_data_parallel_size=1,
+vllm_disable_cascade_attn=False,
+vllm_disable_custom_all_reduce=True,
+vllm_enable_expert_parallel=False,
+vllm_enable_prefix_caching=True,
+vllm_enforce_eager=False,
+vllm_gpu_memory_utilization=0.9,
+vllm_limit_mm_per_prompt={},
+vllm_max_lora_rank=16,
+vllm_max_model_len=None,
+vllm_max_num_seqs=256,
+vllm_mode=colocate,
+vllm_pipeline_parallel_size=1,
+vllm_quantization=None,
+vllm_reasoning_parser=None,
+vllm_server_base_url=None,
+vllm_server_host=None,
+vllm_server_pass_dataset=False,
+vllm_server_port=[8000],
+vllm_server_timeout=240.0,
+vllm_tensor_parallel_size=1,
+vllm_use_async_engine=False,
+wandb_log_unique_prompts=None,
+warmup_ratio=0.05,
+warmup_steps=0,
+weight_decay=0.1,
+whiten_rewards=False,
+zero_hpz_partition_size=None,
+)
+[INFO:swift] Downloading the model from ModelScope Hub, model_id: Qwen/Qwen3-Next-80B-A3B-Thinking
+[INFO:swift] Loading the model using model_dir: /mnt/workspace/.cache/modelscope/hub/models/Qwen/Qwen3-Next-80B-A3B-Thinking
+[INFO:swift] Downloading the model from ModelScope Hub, model_id: Qwen/Qwen3-Next-80B-A3B-Thinking
+[INFO:modelscope] Got 41 files, start to download ...
+Downloading Model from https://www.modelscope.cn to directory: /mnt/workspace/.cache/modelscope/hub/models/Qwen/Qwen3-Next-80B-A3B-Thinking
+Downloading Model from https://www.modelscope.cn to directory: /mnt/workspace/.cache/modelscope/hub/models/Qwen/Qwen3-Next-80B-A3B-Thinking
+Processing 41 items:   0%|          | 0.00/41.0 [00:00<?, ?it/s]
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 0.00/3.72G [00:00<?, ?B/s][A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 0.00/3.73G [00:00<?, ?B/s][A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 0.00/3.72G [00:00<?, ?B/s][A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 0.00/3.73G [00:00<?, ?B/s][A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 0.00/3.73G [00:00<?, ?B/s][A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   0%|          | 0.00/3.73G [00:00<?, ?B/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   0%|          | 0.00/3.73G [00:00<?, ?B/s][A[A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   0%|          | 0.00/3.73G [00:00<?, ?B/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   0%|          | 1.00M/3.73G [00:02<2:35:52, 428kB/s][A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 1.00M/3.73G [00:02<2:40:42, 415kB/s][A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   0%|          | 1.00M/3.73G [00:02<2:39:58, 417kB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   0%|          | 2.00M/3.73G [00:02<1:08:23, 974kB/s][A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 1.00M/3.72G [00:02<2:46:33, 400kB/s][A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   0%|          | 1.00M/3.73G [00:02<2:47:35, 398kB/s][A[A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   0%|          | 2.00M/3.73G [00:02<1:10:30, 945kB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   0%|          | 3.00M/3.73G [00:02<40:17, 1.65MB/s] [A[A[A[A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 1.00M/3.73G [00:02<2:50:53, 390kB/s][A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 1.00M/3.72G [00:02<2:51:51, 388kB/s][A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 1.00M/3.73G [00:02<2:53:16, 385kB/s][A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   0%|          | 2.00M/3.73G [00:02<1:13:01, 912kB/s][A[A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   0%|          | 3.00M/3.73G [00:02<41:21, 1.61MB/s] [A[A[A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 2.00M/3.73G [00:02<1:15:23, 884kB/s][A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   0%|          | 6.00M/3.73G [00:02<15:11, 4.38MB/s][A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 2.00M/3.72G [00:02<1:16:47, 868kB/s][A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   0%|          | 3.00M/3.73G [00:02<42:48, 1.56MB/s] [A[A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   0%|          | 5.00M/3.73G [00:02<20:10, 3.30MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   0%|          | 6.00M/3.73G [00:02<16:01, 4.16MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   0%|          | 8.00M/3.73G [00:02<10:24, 6.39MB/s][A[A[A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 3.00M/3.73G [00:03<47:52, 1.39MB/s] [A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   0%|          | 9.00M/3.73G [00:03<10:06, 6.58MB/s][A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 3.00M/3.72G [00:03<48:01, 1.39MB/s] [A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 2.00M/3.72G [00:03<1:23:57, 794kB/s][A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   0%|          | 10.0M/3.73G [00:03<08:04, 8.24MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   0%|          | 9.00M/3.73G [00:03<09:47, 6.79MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   0%|          | 12.0M/3.73G [00:03<06:59, 9.51MB/s][A[A[A[A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 2.00M/3.73G [00:03<1:28:36, 752kB/s][A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 2.00M/3.73G [00:03<1:28:46, 751kB/s][A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   0%|          | 13.0M/3.73G [00:03<05:44, 11.6MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   0%|          | 14.0M/3.73G [00:03<05:57, 11.1MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   0%|          | 12.0M/3.73G [00:03<06:45, 9.82MB/s][A[A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 4.00M/3.73G [00:03<35:06, 1.90MB/s][A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 3.00M/3.72G [00:03<52:32, 1.27MB/s] [A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   0%|          | 14.0M/3.73G [00:03<05:57, 11.1MB/s][A[A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 4.00M/3.72G [00:03<38:17, 1.74MB/s][A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   0%|          | 17.0M/3.73G [00:03<05:28, 12.1MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   0%|          | 16.0M/3.73G [00:03<05:12, 12.7MB/s][A[A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 5.00M/3.73G [00:03<28:02, 2.37MB/s][A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 4.00M/3.72G [00:03<37:46, 1.76MB/s][A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   0%|          | 18.0M/3.73G [00:03<04:44, 14.0MB/s][A[A[A[A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 3.00M/3.73G [00:03<59:48, 1.11MB/s] [A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|          | 20.0M/3.73G [00:03<04:42, 14.1MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   0%|          | 15.0M/3.73G [00:03<07:41, 8.64MB/s][A[A[A[A[A[A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 3.00M/3.73G [00:03<1:02:02, 1.07MB/s][A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|          | 23.0M/3.73G [00:03<03:51, 17.2MB/s][A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 6.00M/3.73G [00:03<23:43, 2.81MB/s][A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 5.00M/3.72G [00:03<31:58, 2.08MB/s][A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 5.00M/3.72G [00:03<29:33, 2.25MB/s][A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|          | 21.0M/3.73G [00:03<04:36, 14.4MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|          | 26.0M/3.73G [00:03<03:25, 19.3MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|          | 24.0M/3.73G [00:03<03:47, 17.5MB/s][A[A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 6.00M/3.72G [00:03<26:04, 2.55MB/s][A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 7.00M/3.73G [00:03<21:00, 3.17MB/s][A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 6.00M/3.72G [00:04<24:37, 2.70MB/s][A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|          | 27.0M/3.73G [00:04<03:18, 20.0MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|          | 29.0M/3.73G [00:04<03:38, 18.2MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   0%|          | 17.0M/3.73G [00:04<09:41, 6.85MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|          | 30.0M/3.73G [00:04<02:59, 22.1MB/s][A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 7.00M/3.72G [00:04<19:10, 3.47MB/s][A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 4.00M/3.73G [00:04<49:55, 1.33MB/s][A[A[A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 4.00M/3.73G [00:04<50:16, 1.32MB/s]  [A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|          | 33.0M/3.73G [00:04<03:05, 21.3MB/s][A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 7.00M/3.72G [00:04<22:05, 3.01MB/s][A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   0%|          | 19.0M/3.73G [00:04<07:57, 8.34MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|          | 33.0M/3.73G [00:04<02:46, 23.8MB/s][A[A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 8.00M/3.73G [00:04<19:59, 3.33MB/s][A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|          | 36.0M/3.73G [00:04<02:38, 24.9MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|          | 36.0M/3.73G [00:04<03:17, 20.0MB/s][A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 8.00M/3.72G [00:04<17:44, 3.75MB/s][A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 8.00M/3.72G [00:04<19:29, 3.41MB/s][A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 21.0M/3.73G [00:04<07:49, 8.47MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|          | 39.0M/3.73G [00:04<02:34, 25.6MB/s][A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 9.00M/3.72G [00:04<14:38, 4.54MB/s][A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 9.00M/3.73G [00:04<18:33, 3.58MB/s][A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|          | 39.0M/3.73G [00:04<03:16, 20.1MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|          | 42.0M/3.73G [00:04<02:32, 26.0MB/s][A[A[A[A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 5.00M/3.73G [00:04<42:44, 1.56MB/s][A[A[A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 5.00M/3.73G [00:04<42:49, 1.55MB/s][A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 10.0M/3.72G [00:04<13:09, 5.05MB/s][A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 23.0M/3.73G [00:04<07:34, 8.75MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|          | 45.0M/3.73G [00:04<02:27, 26.9MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|          | 42.0M/3.73G [00:04<03:25, 19.2MB/s][A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 9.00M/3.72G [00:04<19:38, 3.39MB/s][A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 10.0M/3.73G [00:04<17:15, 3.85MB/s][A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 11.0M/3.72G [00:04<11:27, 5.80MB/s][A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 25.0M/3.73G [00:04<06:29, 10.2MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|          | 44.0M/3.73G [00:04<03:26, 19.2MB/s][A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|          | 46.0M/3.73G [00:04<03:26, 19.1MB/s][A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 10.0M/3.72G [00:04<17:51, 3.72MB/s][A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 11.0M/3.73G [00:04<16:18, 4.07MB/s][A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|▏         | 48.0M/3.73G [00:04<03:25, 19.2MB/s][A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 12.0M/3.72G [00:05<12:37, 5.27MB/s][A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 6.00M/3.73G [00:05<36:44, 1.81MB/s][A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|▏         | 48.0M/3.73G [00:05<03:27, 19.1MB/s][A[A[A[A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 6.00M/3.73G [00:05<38:43, 1.72MB/s][A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|▏         | 50.0M/3.73G [00:05<03:27, 19.0MB/s][A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 11.0M/3.72G [00:05<16:38, 4.00MB/s][A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 12.0M/3.73G [00:05<16:01, 4.15MB/s][A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 13.0M/3.72G [00:05<12:36, 5.27MB/s][A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 27.0M/3.73G [00:05<08:51, 7.47MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|▏         | 53.0M/3.73G [00:05<03:09, 20.8MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|▏         | 51.0M/3.73G [00:05<04:27, 14.7MB/s][A[A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 12.0M/3.72G [00:05<13:58, 4.75MB/s][A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|▏         | 55.0M/3.73G [00:05<03:14, 20.3MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|▏         | 54.0M/3.73G [00:05<03:48, 17.3MB/s][A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 14.0M/3.72G [00:05<13:13, 5.02MB/s][A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 13.0M/3.73G [00:05<15:49, 4.20MB/s][A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 7.00M/3.73G [00:05<33:43, 1.97MB/s][A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   1%|▏         | 57.0M/3.73G [00:05<03:25, 19.1MB/s][A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 13.0M/3.72G [00:05<13:54, 4.78MB/s][A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 7.00M/3.73G [00:05<34:28, 1.93MB/s][A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 15.0M/3.72G [00:05<12:19, 5.39MB/s][A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 60.0M/3.73G [00:05<03:13, 20.3MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   1%|▏         | 57.0M/3.73G [00:05<04:13, 15.5MB/s][A[A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 14.0M/3.73G [00:05<15:41, 4.23MB/s][A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 14.0M/3.72G [00:05<13:56, 4.77MB/s][A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 62.0M/3.73G [00:05<03:14, 20.2MB/s][A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 16.0M/3.72G [00:05<12:26, 5.34MB/s][A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 29.0M/3.73G [00:05<11:43, 5.64MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 8.00M/3.73G [00:05<30:52, 2.15MB/s][A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 15.0M/3.73G [00:05<14:03, 4.72MB/s][A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 64.0M/3.73G [00:05<03:18, 19.8MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 59.0M/3.73G [00:05<04:49, 13.6MB/s][A[A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 15.0M/3.72G [00:05<13:55, 4.77MB/s][A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 17.0M/3.72G [00:05<11:43, 5.66MB/s][A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 30.0M/3.73G [00:05<11:03, 5.98MB/s][A[A[A[A[A[A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 8.00M/3.73G [00:05<32:30, 2.05MB/s][A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 67.0M/3.73G [00:05<03:10, 20.6MB/s][A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 16.0M/3.73G [00:06<13:42, 4.84MB/s][A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 61.0M/3.73G [00:06<05:06, 12.8MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 31.0M/3.73G [00:06<10:10, 6.50MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 69.0M/3.73G [00:06<03:13, 20.3MB/s][A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 18.0M/3.72G [00:06<11:58, 5.54MB/s][A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 16.0M/3.72G [00:06<13:50, 4.80MB/s][A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 32.0M/3.73G [00:06<09:32, 6.92MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 9.00M/3.73G [00:06<29:46, 2.23MB/s][A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 72.0M/3.73G [00:06<03:19, 19.6MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 63.0M/3.73G [00:06<05:35, 11.7MB/s][A[A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 17.0M/3.73G [00:06<14:12, 4.67MB/s][A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 33.0M/3.73G [00:06<09:02, 7.31MB/s][A[A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   0%|          | 19.0M/3.72G [00:06<11:34, 5.73MB/s][A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 9.00M/3.73G [00:06<29:33, 2.25MB/s][A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 17.0M/3.72G [00:06<13:49, 4.80MB/s][A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 75.0M/3.73G [00:06<03:10, 20.5MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 34.0M/3.73G [00:06<08:41, 7.60MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 65.0M/3.73G [00:06<05:54, 11.1MB/s][A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 20.0M/3.72G [00:06<11:44, 5.65MB/s][A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 18.0M/3.73G [00:06<14:33, 4.56MB/s][A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 78.0M/3.73G [00:06<03:08, 20.7MB/s][A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 18.0M/3.72G [00:06<13:35, 4.88MB/s][A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 35.0M/3.73G [00:06<09:18, 7.09MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 10.0M/3.73G [00:06<27:44, 2.40MB/s][A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   0%|          | 19.0M/3.73G [00:06<13:15, 5.00MB/s][A[A
+Downloading [model-00001-of-00041.safetensors]:   0%|          | 19.0M/3.72G [00:06<11:51, 5.59MB/s][A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 67.0M/3.73G [00:06<06:09, 10.6MB/s][A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 21.0M/3.72G [00:06<12:40, 5.23MB/s][A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 80.0M/3.73G [00:06<03:53, 16.8MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 36.0M/3.73G [00:06<09:34, 6.89MB/s][A[A[A[A[A[A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 10.0M/3.73G [00:06<29:57, 2.22MB/s][A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 69.0M/3.73G [00:06<05:42, 11.5MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 37.0M/3.73G [00:06<08:55, 7.39MB/s][A[A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 22.0M/3.72G [00:06<11:48, 5.61MB/s][A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   1%|          | 20.0M/3.73G [00:06<13:13, 5.02MB/s][A[A
+Downloading [model-00001-of-00041.safetensors]:   1%|          | 20.0M/3.72G [00:06<12:26, 5.33MB/s][A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 84.0M/3.73G [00:06<03:28, 18.8MB/s][A[A[A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 11.0M/3.73G [00:06<26:08, 2.54MB/s][A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 38.0M/3.73G [00:06<08:28, 7.79MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 86.0M/3.73G [00:07<03:38, 17.9MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 71.0M/3.73G [00:07<06:00, 10.9MB/s][A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 23.0M/3.72G [00:07<12:06, 5.47MB/s][A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 39.0M/3.73G [00:07<08:07, 8.12MB/s][A[A[A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   1%|          | 21.0M/3.73G [00:07<13:47, 4.80MB/s][A[A
+Downloading [model-00001-of-00041.safetensors]:   1%|          | 21.0M/3.72G [00:07<12:51, 5.16MB/s][A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 88.0M/3.73G [00:07<03:38, 17.8MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 40.0M/3.73G [00:07<07:53, 8.36MB/s][A[A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 24.0M/3.72G [00:07<11:23, 5.81MB/s][A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 73.0M/3.73G [00:07<06:05, 10.7MB/s][A[A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   1%|          | 22.0M/3.73G [00:07<12:43, 5.21MB/s][A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 41.0M/3.73G [00:07<07:43, 8.54MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 12.0M/3.73G [00:07<25:04, 2.65MB/s][A[A[A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 11.0M/3.73G [00:07<31:03, 2.14MB/s][A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   1%|          | 22.0M/3.72G [00:07<12:54, 5.13MB/s][A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 90.0M/3.73G [00:07<04:04, 16.0MB/s][A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 25.0M/3.72G [00:07<11:59, 5.52MB/s][A[A[A
+Downloading [model-00001-of-00041.safetensors]:   1%|          | 23.0M/3.72G [00:07<11:26, 5.79MB/s][A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 75.0M/3.73G [00:07<06:14, 10.5MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 92.0M/3.73G [00:07<04:03, 16.0MB/s][A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   1%|          | 23.0M/3.73G [00:07<12:59, 5.10MB/s][A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 42.0M/3.73G [00:07<09:47, 6.73MB/s][A[A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 26.0M/3.72G [00:07<11:12, 5.91MB/s][A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   2%|▏         | 94.0M/3.73G [00:07<04:00, 16.2MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 77.0M/3.73G [00:07<05:42, 11.5MB/s][A[A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   1%|          | 24.0M/3.72G [00:07<12:07, 5.46MB/s][A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 44.0M/3.73G [00:07<07:11, 9.16MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 13.0M/3.73G [00:07<24:57, 2.66MB/s][A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   3%|▎         | 96.0M/3.73G [00:07<04:00, 16.2MB/s][A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   1%|          | 24.0M/3.73G [00:07<13:28, 4.91MB/s][A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 27.0M/3.72G [00:07<11:47, 5.61MB/s][A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 12.0M/3.73G [00:07<31:01, 2.14MB/s][A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 79.0M/3.73G [00:07<05:51, 11.1MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   3%|▎         | 98.0M/3.73G [00:07<04:01, 16.1MB/s][A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   1%|          | 25.0M/3.73G [00:07<11:57, 5.54MB/s][A[A
+Downloading [model-00001-of-00041.safetensors]:   1%|          | 25.0M/3.72G [00:07<12:35, 5.26MB/s][A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 45.0M/3.73G [00:07<08:45, 7.52MB/s][A[A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 28.0M/3.72G [00:07<11:14, 5.89MB/s][A[A[A
+Downloading [model-00001-of-00041.safetensors]:   1%|          | 26.0M/3.72G [00:08<10:55, 6.06MB/s][A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   3%|▎         | 100M/3.73G [00:08<04:14, 15.3MB/s] [A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 81.0M/3.73G [00:08<06:05, 10.7MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 46.0M/3.73G [00:08<08:38, 7.62MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 14.0M/3.73G [00:08<24:12, 2.74MB/s][A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   1%|          | 26.0M/3.73G [00:08<12:57, 5.11MB/s][A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   3%|▎         | 102M/3.73G [00:08<04:09, 15.6MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|          | 47.0M/3.73G [00:08<08:20, 7.89MB/s][A[A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 29.0M/3.72G [00:08<11:38, 5.68MB/s][A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 83.0M/3.73G [00:08<05:41, 11.5MB/s][A[A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   1%|          | 27.0M/3.72G [00:08<11:46, 5.62MB/s][A
+
+Downloading [model-00002-of-00041.safetensors]:   1%|          | 27.0M/3.73G [00:08<11:55, 5.55MB/s][A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   3%|▎         | 104M/3.73G [00:08<03:58, 16.3MB/s][A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 30.0M/3.72G [00:08<11:07, 5.94MB/s][A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 13.0M/3.73G [00:08<32:22, 2.05MB/s][A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|▏         | 48.0M/3.73G [00:08<09:55, 6.64MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 85.0M/3.73G [00:08<05:51, 11.1MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   3%|▎         | 106M/3.73G [00:08<04:02, 16.0MB/s][A[A[A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 15.0M/3.73G [00:08<23:42, 2.80MB/s][A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   1%|          | 28.0M/3.72G [00:08<12:22, 5.35MB/s][A
+
+Downloading [model-00002-of-00041.safetensors]:   1%|          | 28.0M/3.73G [00:08<12:24, 5.33MB/s][A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|▏         | 49.0M/3.73G [00:08<09:15, 7.11MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   3%|▎         | 108M/3.73G [00:08<03:59, 16.2MB/s][A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 31.0M/3.72G [00:08<12:01, 5.50MB/s][A[A[A
+Downloading [model-00001-of-00041.safetensors]:   1%|          | 29.0M/3.72G [00:08<10:50, 6.10MB/s][A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 87.0M/3.73G [00:08<06:02, 10.8MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|▏         | 50.0M/3.73G [00:08<08:42, 7.55MB/s][A[A[A[A[A[A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   3%|▎         | 110M/3.73G [00:08<03:57, 16.4MB/s][A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   1%|          | 29.0M/3.73G [00:08<13:06, 5.05MB/s][A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|▏         | 51.0M/3.73G [00:08<08:29, 7.75MB/s][A[A[A[A[A[A[A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 32.0M/3.72G [00:08<12:17, 5.38MB/s][A[A[A
+Downloading [model-00001-of-00041.safetensors]:   1%|          | 30.0M/3.72G [00:08<11:38, 5.68MB/s][A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   3%|▎         | 112M/3.73G [00:08<04:14, 15.2MB/s][A[A[A[A[A[A
+
+
+
+Downloading [model-00004-of-00041.safetensors]:   0%|          | 14.0M/3.73G [00:08<31:54, 2.08MB/s][A[A[A[A
+
+
+
+
+Downloading [model-00005-of-00041.safetensors]:   0%|          | 16.0M/3.73G [00:08<24:54, 2.67MB/s][A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 89.0M/3.73G [00:08<06:45, 9.62MB/s][A[A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   1%|          | 30.0M/3.73G [00:08<12:11, 5.42MB/s][A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 33.0M/3.72G [00:08<11:28, 5.76MB/s][A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   3%|▎         | 114M/3.73G [00:08<04:03, 15.9MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|▏         | 52.0M/3.73G [00:08<10:03, 6.54MB/s][A[A[A[A[A[A[A[A
+Downloading [model-00001-of-00041.safetensors]:   1%|          | 31.0M/3.72G [00:09<12:16, 5.38MB/s][A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   3%|▎         | 116M/3.73G [00:09<03:53, 16.6MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 91.0M/3.73G [00:09<06:32, 9.95MB/s][A[A[A[A[A[A[A
+
+
+
+
+
+
+
+Downloading [model-00008-of-00041.safetensors]:   1%|▏         | 53.0M/3.73G [00:09<09:17, 7.07MB/s][A[A[A[A[A[A[A[A
+
+Downloading [model-00002-of-00041.safetensors]:   1%|          | 31.0M/3.73G [00:09<12:38, 5.23MB/s][A[A
+
+
+Downloading [model-00003-of-00041.safetensors]:   1%|          | 34.0M/3.72G [00:09<11:54, 5.54MB/s][A[A[A
+
+
+
+
+
+Downloading [model-00006-of-00041.safetensors]:   3%|▎         | 118M/3.73G [00:09<03:52, 16.7MB/s][A[A[A[A[A[A
+
+
+
+
+
+
+Downloading [model-00007-of-00041.safetensors]:   2%|▏         | 92.0M/3.73G [00:09<06:38, 9.80MB/s][A[A[A[A[A[A[A
