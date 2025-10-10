@@ -40,3 +40,6 @@ scratch/
 .history/
 *.sif
 download/
+training/logs/
+training/output/
+training/wandb/
