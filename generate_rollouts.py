@@ -161,7 +161,6 @@ def main(args: argparse.Namespace):
     max_search_limit = args.max_search_limit
     max_turn = args.max_turn
     model_path = args.model_path
-    model_context_length = args.model_context_length
     output_dir_base = args.output_dir_base
     rollout_num = args.rollout_num
 
@@ -176,7 +175,6 @@ def main(args: argparse.Namespace):
     # Load model and tokenizer
     llm = load_vllm_model(model_path, gpu_memory_utilization=args.gpu_memory_utilization)
     tokenizer = load_tokenizer(model_path)
-    # model_context_length = AutoConfig.from_pretrained(model_path).max_position_embeddings
 
     # Initialize retriever
     retriever = load_retriever(args.retriever, default_k=args.retriever_top_k, **json.loads(args.retriever_kwargs))
@@ -196,8 +194,8 @@ def main(args: argparse.Namespace):
     summarizer = Summarizer(
         llm=llm,
         tokenizer=tokenizer,
-        model_context_length=model_context_length,
         top_k=args.summarizer_top_k,
+        max_tokens_per_webpage=args.max_tokens_per_webpage,
         max_tokens=args.summarizer_max_tokens,
         temperature=args.summarizer_temperature,
         top_p=args.summarizer_top_p,
@@ -542,14 +540,12 @@ if __name__ == "__main__":
 
     parser.add_argument("--summarizer_top_k", type=int, default=10, help="Maximum number of search documents to use.")
 
-    parser.add_argument("--max_doc_len", type=int, default=3000, help="Maximum length of each searched document.")
-
     # Model configuration
     parser.add_argument("--model_path", type=str, required=True, help="Path to the reasoning model.")
 
     parser.add_argument("--gpu_memory_utilization", type=float, default=0.75, help="GPU memory utilization for vLLM.")
 
-    parser.add_argument("--model_context_length", type=int, default=262144, help="Max context length of the model specified by --model_path.")
+    parser.add_argument("--max_tokens_per_webpage", type=int, default=2000, help="Max tokens for each web pages.")
 
     # Sampling parameters
     parser.add_argument("--temperature", type=float, default=0.6, help="Sampling temperature.")

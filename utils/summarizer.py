@@ -16,16 +16,16 @@ class Summarizer:
         self,
         llm: LLM,
         tokenizer: AutoTokenizer,
-        model_context_length,
         top_k: int,
+        max_tokens_per_webpage: int,
         max_tokens: int = 8192,
         temperature: float = 0.6,
         top_p: float = 0.95,
     ):
         self.llm = llm
         self.tokenizer = tokenizer
-        self.model_context_length = model_context_length
         self.top_k = top_k
+        self.max_tokens_per_webpage = max_tokens_per_webpage
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.top_p = top_p
@@ -59,7 +59,7 @@ class Summarizer:
             messages=[[prompt] for prompt in prompts], sampling_params=summ_sampling_params, use_tqdm=True
         )
 
-        results = [self._parse_result(raw.outputs[0].text) for raw in raw_outputs]
+        results = [self._delete_invalid_spaces(self._parse_result(raw.outputs[0].text)) for raw in raw_outputs]
 
         retry_count = 0
         while True:
@@ -69,23 +69,23 @@ class Summarizer:
                 validation = self._validate_citation_format(res, valid_ids)
                 if not validation["is_valid"]:
                     invalid_indices.append(i)
-                    logger.warning(f"Invalid citation format found in result {i}: {validation['errors']}")
+                    logger.warning(f"Invalid format found in result {i}: {validation['errors']}")
 
             if len(invalid_indices) == 0:
-                logger.info("All outputs have valid citation formats.")
+                logger.info("All outputs have valid formats.")
                 break
 
             if retry_count >= max_retry:
-                logger.error("Maximum retry attempts reached. Some outputs may still have invalid citation formats.")
+                logger.error("Maximum retry attempts reached. Some outputs may still have invalid formats.")
                 break
 
-            logger.info(f"Retrying {len(invalid_indices)} outputs due to invalid citation formats...")
+            logger.info(f"Retrying {len(invalid_indices)} outputs due to invalid formats...")
             retry_prompts = [prompts[i] for i in invalid_indices]
             retry_raw_outputs = self.llm.chat(
                 messages=[[prompt] for prompt in retry_prompts], sampling_params=summ_sampling_params, use_tqdm=True
             )
             for idx, raw in zip(invalid_indices, retry_raw_outputs):
-                results[idx] = self._parse_result(raw.outputs[0].text)
+                results[idx] = self._delete_invalid_spaces(self._parse_result(raw.outputs[0].text))
                 raw_outputs[idx] = raw
 
             retry_count += 1
@@ -95,9 +95,30 @@ class Summarizer:
                 batch_output_records.append({"prompt": p, "raw_output": r.outputs[0].text, "extracted_info": e})
 
         return results
+   
+    @staticmethod
+    def _delete_invalid_spaces(text):
+        citation_pattern = r"\([^)]*#[0-9a-f]{4}[^)]*\)"
+        
+        if text is None:
+            return None
+    
+        def normalize_citation(match):
+            citation = match.group()
+            content = citation[1:-1]
+            normalized_content = content.strip().replace(" ", "")
+            return f"({normalized_content})"
+    
+        normalized_text = re.sub(citation_pattern, normalize_citation, text)
+        return normalized_text
 
     def _validate_citation_format(self, text: str, valid_ids: list[str]) -> dict:
         results = {"is_valid": True, "errors": []}
+        
+        if text is None:
+            results["is_valid"] = False
+            results["errors"].append("**Final answer format error**")
+            return results
 
         citation_pattern = r"\([^)]*#[0-9a-f]{4}[^)]*\)"
         matches = re.finditer(citation_pattern, text)
@@ -135,22 +156,21 @@ class Summarizer:
         if split_str in output:
             extracted_text = output.split(split_str)[-1].replace("\n", "").strip("```").strip()
         else:
-            logger.warning(f"The output does not contain the expected '**Final Information**' tag: {output}")
-            extracted_text = output
+            logger.warning(f"The output does not contain the expected '**Final Information**' tag: {output[:100]}")
+            extracted_text = None
 
         return extracted_text
 
     def _prepare_documents_str(self, documents: dict) -> str:
         documents_str = ""
-        valid_len_per_doc = int(self.model_context_length * 0.8 / self.top_k)
         for i, (ref_id, data) in enumerate(documents.items()):
             if i >= self.top_k:
                 break
 
             # token length check
             tokenized_doc = self.tokenizer(data["text"])["input_ids"]
-            if len(tokenized_doc) > valid_len_per_doc:
-                tokenized_doc = tokenized_doc[:valid_len_per_doc]  # truncate
+            if len(tokenized_doc) > self.max_tokens_per_webpage:
+                tokenized_doc = tokenized_doc[:self.max_tokens_per_webpage]  # truncate
                 doc_text = self.tokenizer.decode(tokenized_doc, skip_special_tokens=True)
                 logger.info(f"Document {ref_id} is truncated to fit the token limit.")
             else:
