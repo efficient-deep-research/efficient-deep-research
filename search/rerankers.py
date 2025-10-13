@@ -1,3 +1,5 @@
+import gc
+
 import torch
 from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification, AutoTokenizer, BatchEncoding
 
@@ -24,11 +26,20 @@ class JinaReranker(Reranker):
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
+        self.model_name = model_name
+        self.load_model()
+
+    def load_model(self):
         self.model = (
-            AutoModelForSequenceClassification.from_pretrained(model_name, dtype="auto", trust_remote_code=True)
+            AutoModelForSequenceClassification.from_pretrained(self.model_name, dtype="auto", trust_remote_code=True)
             .to(self.device)
             .eval()
         )
+
+    def unload_model(self):
+        del self.model
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def __call__(self, query: str, documents: list[Document]) -> tuple[list[Document], list[float]]:
         text_pairs = [(query, document.text) for document in documents]
@@ -54,8 +65,10 @@ class Qwen3Reranker(Reranker):
         super().__init__(max_length=max_length, batch_size=batch_size)
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 
-        self.model = AutoModelForCausalLM.from_pretrained(model_name).to(self.device).eval()
+        self.model_name = model_name
+        self.load_model()
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
 
         self.token_true_id = self.tokenizer.convert_tokens_to_ids("yes")
@@ -70,6 +83,20 @@ class Qwen3Reranker(Reranker):
             instruction = "Given a web search query, retrieve relevant passages that answer the query"
 
         self.instruction = instruction
+
+    def load_model(self):
+        self.model = (
+            AutoModelForCausalLM.from_pretrained(
+                self.model_name, dtype=self.dtype, attn_implementation="flash_attention_2"
+            )
+            .to(self.device)
+            .eval()
+        )
+
+    def unload_model(self):
+        del self.model
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def _format_instruction(self, query: str, doc: str) -> str:
         output = "<Instruct>: {instruction}\n<Query>: {query}\n<Document>: {doc}".format(
@@ -132,7 +159,8 @@ class ContextualAIReranker(Reranker):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, dtype=self.dtype).to(self.device).eval()
+        self.model_name = model_name
+        self.load_model()
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -142,6 +170,20 @@ class ContextualAIReranker(Reranker):
             instruction = f" {instruction}"
 
         self.instruction = instruction
+
+    def load_model(self):
+        self.model = (
+            AutoModelForCausalLM.from_pretrained(
+                self.model_name, dtype=self.dtype, attn_implementation="flash_attention_2"
+            )
+            .to(self.device)
+            .eval()
+        )
+
+    def unload_model(self):
+        del self.model
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def _format_prompts(self, query: str, documents: list[str]) -> list[str]:
         prompts = []

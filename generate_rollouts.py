@@ -1,13 +1,16 @@
 import argparse
+import gc
 import hashlib
 import json
 import logging
 import os
 import re
+import sys
 import time
 import types
 
-from transformers import AutoTokenizer, AutoConfig
+import torch
+from transformers import AutoTokenizer
 
 from search.rerankers import load_reranker
 from search.retrievers import load_retriever
@@ -189,6 +192,7 @@ def main(args: argparse.Namespace):
             batch_size=args.reranker_batch_size,
             **json.loads(args.reranker_kwargs),
         )
+        reranker.unload_model()
 
     # Initialize summarizer
     summarizer = Summarizer(
@@ -258,7 +262,7 @@ def main(args: argparse.Namespace):
 
                 # perform initial search for all questions
                 batch_initial_search_documents_path = os.path.join(
-                    output_dir_base, dataset_name, f"batch_initial_search_documents.json"
+                    output_dir_base, dataset_name, "batch_initial_search_documents.json"
                 )
                 if os.path.exists(batch_initial_search_documents_path):
                     print(f"Loading initial search documents from {batch_initial_search_documents_path}")
@@ -266,6 +270,9 @@ def main(args: argparse.Namespace):
                         batch_initial_search_documents = json.load(f)
                 else:
                     batch_initial_search_documents = []
+                    if reranker is not None:
+                        reranker.load_model()
+
                     for question in questions:
                         try:
                             print(f'Executing search for query: "{question}"')
@@ -287,6 +294,9 @@ def main(args: argparse.Namespace):
 
                     with open(batch_initial_search_documents_path, "w", encoding="utf-8") as f:
                         json.dump(batch_initial_search_documents, f, ensure_ascii=False, indent=2)
+
+                    if reranker is not None:
+                        reranker.unload_model()
 
                 initial_search_summaries = summarizer(
                     previous_reasonings=[],  # empty list for initial search
@@ -345,6 +355,11 @@ def main(args: argparse.Namespace):
                 batch_search_queries = []
                 batch_documents = []
                 batch_sequences = []
+
+                if reranker is not None:
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    reranker.load_model()
 
                 start_search_time = time.time()
                 for seq, out in zip(sequences_needing_generation, outputs):
@@ -439,6 +454,8 @@ def main(args: argparse.Namespace):
                         print("Sequence marked as complete.")
 
                 print(f"get search time taken: {time.time() - start_search_time}")
+                if reranker is not None:
+                    reranker.unload_model()
 
                 if batch_sequences:
                     print(f"Batch processing {len(batch_sequences)} sequences with summarizer...")
