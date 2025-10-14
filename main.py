@@ -198,17 +198,11 @@ print("Setup completed.")
 
 
 def extract_final_answer(output: str) -> str:
-    pattern = r"\\boxed\{\\text{(.*?)\}\}"
-    match = re.search(pattern, output, flags=re.DOTALL)
-    if match:
-        return match.group(1).strip()
-
-    pattern_unnested = r"\\boxed\{(.*?)\}"
-    match_unnested = re.findall(pattern_unnested, output, flags=re.DOTALL)
-    if match_unnested:
-        return match_unnested[-1].strip()
-
-    return ""
+    marker = "**Final Information**"
+    if marker in output:
+        return output.split(marker)[-1].strip()
+    else:
+        return ""
 
 
 def generate_ref_id(existing_ids: set, reranked_webpages: list[Document]) -> dict[str, dict[str, str]]:
