@@ -14,6 +14,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project
 RUN uv pip install torch
 RUN uv pip install vllm --torch-backend=auto
+RUN uv pip install flash-attn --no-build-isolation
 
 # Copy the project into the image
 COPY . /app
