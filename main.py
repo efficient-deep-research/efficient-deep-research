@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from typing import Iterator
 
 from fastapi import FastAPI
@@ -138,8 +139,7 @@ class OpenAISummarizer(Summarizer):
         return result
 
 
-model_path = "RUC-AIBOX/Qwen-7B-SimpleDeepSearcher"
-gpu_memory_utilization = 0.75
+model_path = "Qwen/Qwen3-4B-Thinking-2507"
 
 max_search_limit = 10
 max_turns = 15
@@ -152,6 +152,7 @@ top_k_sampling = 40
 retriever_name = "clueweb22-a"
 retriever_top_k = 1000
 retriever_kwargs = "{}"
+max_search_retries = 5
 
 reranker_name = "contextualai"
 reranker_max_tokens = 1024
@@ -241,10 +242,17 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
     print(f"Processing question: {question}")
 
     print("Performing initial search...")
-    try:
-        search_results = retriever(question)
-        print(f"Retrieved {len(search_results)} documents.")
-    except Exception:
+    for search_retry_count in range(max_search_retries):
+        try:
+            search_results = retriever(question)
+            print(f"Retrieved {len(search_results)} documents.")
+            break
+        except Exception:
+            if search_retry_count < max_search_retries - 1:
+                interval = 10 * 2**search_retry_count
+                print(f"Search failed. Trying after {interval} seconds...")
+                time.sleep(interval)
+    else:
         search_results = []
         print("Retriever failed. Proceeding with zero documents.")
 
@@ -301,10 +309,17 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
         if search_query and output.rstrip().endswith(END_SEARCH_QUERY):
             if search_count < max_search_limit and search_query not in executed_search_queries:
                 print(f"Performing search {search_count + 1} with query: {search_query}")
-                try:
-                    search_results = retriever(search_query)
-                    print(f"Retrieved {len(search_results)} documents.")
-                except Exception:
+                for search_retry_count in range(max_search_retries):
+                    try:
+                        search_results = retriever(search_query)
+                        print(f"Retrieved {len(search_results)} documents.")
+                        break
+                    except Exception:
+                        if search_retry_count < max_search_retries - 1:
+                            interval = 10 * 2**search_retry_count
+                            print(f"Search failed. Trying after {interval} seconds...")
+                            time.sleep(interval)
+                else:
                     search_results = []
                     print("Retriever failed. Proceeding with zero documents.")
 
@@ -409,16 +424,25 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
 @app.post("/evaluate")
 def evaluate(request: EvaluateRequest) -> EvaluateResponse:
     generated_response = ""
-    for item in run_inference(request.query):
-        if item["complete"]:
-            generated_response = item["final_report"]
-            break
+    try:
+        for item in run_inference(request.query):
+            if item["complete"]:
+                generated_response = item["final_report"]
+                break
+    except Exception as e:
+        print(f"Error during evaluation: {e}")
 
     return EvaluateResponse(query_id=request.iid, generated_response=generated_response)
 
 
 def response_streamer(question: str) -> Iterator[str]:
-    for item in run_inference(question):
+    item = {"intermediate_steps": None, "final_report": None, "is_intermediate": True, "complete": False}
+    try:
+        for item in run_inference(question):
+            yield f"data: {json.dumps(item)}\n"
+    except Exception as e:
+        item["error"] = str(e)
+        item["complete"] = True
         yield f"data: {json.dumps(item)}\n"
 
 
