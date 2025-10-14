@@ -65,12 +65,22 @@ class OpenAISummarizer(Summarizer):
         self,
         client: OpenAI,
         model: str,
+        tokenizer: PreTrainedTokenizer,
         top_k: int,
+        max_tokens_per_webpage: int,
         max_tokens: int = 8192,
         temperature: float = 0.6,
         top_p: float = 0.95,
     ):
-        super().__init__(llm=None, top_k=top_k, max_tokens=max_tokens, temperature=temperature, top_p=top_p)
+        super().__init__(
+            llm=None,
+            tokenizer=tokenizer,
+            top_k=top_k,
+            max_tokens_per_webpage=max_tokens_per_webpage,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+        )
         self.client = client
         self.model = model
 
@@ -80,7 +90,7 @@ class OpenAISummarizer(Summarizer):
         if split_str in output:
             extracted_text = output.split(split_str)[-1].replace("\n", "").strip("```").strip()
         else:
-            extracted_text = output
+            extracted_text = None
 
         return extracted_text
 
@@ -107,7 +117,7 @@ class OpenAISummarizer(Summarizer):
             top_p=self.top_p,
         )
 
-        result = self._parse_result(raw_output.choices[0].message.content)
+        result = self._delete_invalid_spaces(self._parse_result(raw_output.choices[0].message.content))
 
         for _ in range(max_retry):
             valid_ids = list(documents.keys())
@@ -123,7 +133,7 @@ class OpenAISummarizer(Summarizer):
                 temperature=self.temperature,
                 top_p=self.top_p,
             )
-            result = self._parse_result(retry_raw_output.choices[0].message.content)
+            result = self._delete_invalid_spaces(self._parse_result(retry_raw_output.choices[0].message.content))
 
         return result
 
@@ -133,6 +143,7 @@ gpu_memory_utilization = 0.75
 
 max_search_limit = 10
 max_turns = 15
+max_tokens_per_webpage = 2000
 max_tokens = 20480
 temperature = 0.6
 top_p = 0.95
@@ -175,7 +186,9 @@ print("Loading summarizer...")
 summarizer = OpenAISummarizer(
     client=client,
     model=model_path,
+    tokenizer=tokenizer,
     top_k=summarizer_top_k,
+    max_tokens_per_webpage=max_tokens_per_webpage,
     max_tokens=summarizer_max_tokens,
     temperature=summarizer_temperature,
     top_p=summarizer_top_p,
@@ -332,6 +345,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                     previous_reasoning="\n\n".join(reasoning_steps),
                     search_query=search_query,
                     documents=search_documents,
+                    max_retry=20,
                 )
                 print("Search summary generated.")
                 print(f"Summarizer output: {webpage_summary}")
