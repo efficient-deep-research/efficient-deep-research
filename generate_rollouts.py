@@ -1,12 +1,15 @@
 import argparse
+import gc
 import hashlib
 import json
 import logging
 import os
 import re
+import sys
 import time
 import types
 
+import torch
 from transformers import AutoTokenizer
 
 from search.rerankers import load_reranker
@@ -189,11 +192,14 @@ def main(args: argparse.Namespace):
             batch_size=args.reranker_batch_size,
             **json.loads(args.reranker_kwargs),
         )
+        reranker.unload_model()
 
     # Initialize summarizer
     summarizer = Summarizer(
         llm=llm,
+        tokenizer=tokenizer,
         top_k=args.summarizer_top_k,
+        max_tokens_per_webpage=args.max_tokens_per_webpage,
         max_tokens=args.summarizer_max_tokens,
         temperature=args.summarizer_temperature,
         top_p=args.summarizer_top_p,
@@ -255,31 +261,49 @@ def main(args: argparse.Namespace):
                 questions = [item["Question"] for item in data]
 
                 # perform initial search for all questions
-                batch_initial_search_documents = []
-                for question in questions:
-                    try:
-                        print(f'Executing search for query: "{question}"')
-                        search_results = retriever(question)
-                    except Exception as e:
-                        print(f'Search failed for query "{question}": {e}')
-                        search_results = []
+                batch_initial_search_documents_path = os.path.join(
+                    output_dir_base, dataset_name, "batch_initial_search_documents.json"
+                )
+                if os.path.exists(batch_initial_search_documents_path):
+                    print(f"Loading initial search documents from {batch_initial_search_documents_path}")
+                    with open(batch_initial_search_documents_path, "r", encoding="utf-8") as f:
+                        batch_initial_search_documents = json.load(f)
+                else:
+                    batch_initial_search_documents = []
+                    if reranker is not None:
+                        reranker.load_model()
 
-                    if reranker is not None and len(search_results) > 0:
-                        print("Reranking search results")
-                        reranked_results, _ = reranker(question, search_results)
-                    else:
-                        reranked_results = search_results
+                    for question in questions:
+                        try:
+                            print(f'Executing search for query: "{question}"')
+                            search_results = retriever(question)
+                        except Exception as e:
+                            print(f'Search failed for query "{question}": {e}')
+                            search_results = []
 
-                    # attend unique hash ids to each webpage
-                    initial_search_documents = generate_ref_id(set(), reranked_results)
+                        if reranker is not None and len(search_results) > 0:
+                            print("Reranking search results")
+                            reranked_results, _ = reranker(question, search_results)
+                        else:
+                            reranked_results = search_results
 
-                    batch_initial_search_documents.append(initial_search_documents)
+                        # attend unique hash ids to each webpage
+                        initial_search_documents = generate_ref_id(set(), reranked_results)
+
+                        batch_initial_search_documents.append(initial_search_documents)
+
+                    with open(batch_initial_search_documents_path, "w", encoding="utf-8") as f:
+                        json.dump(batch_initial_search_documents, f, ensure_ascii=False, indent=2)
+
+                    if reranker is not None:
+                        reranker.unload_model()
 
                 initial_search_summaries = summarizer(
                     previous_reasonings=[],  # empty list for initial search
                     search_queries=questions,
                     documents=batch_initial_search_documents,
                     batch_output_records=batch_output_records,  # Pass the collection list
+                    max_retry=20,
                 )
 
                 active_sequences, input_list = prepare_input_prompts(
@@ -331,6 +355,11 @@ def main(args: argparse.Namespace):
                 batch_search_queries = []
                 batch_documents = []
                 batch_sequences = []
+
+                if reranker is not None:
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    reranker.load_model()
 
                 start_search_time = time.time()
                 for seq, out in zip(sequences_needing_generation, outputs):
@@ -425,6 +454,8 @@ def main(args: argparse.Namespace):
                         print("Sequence marked as complete.")
 
                 print(f"get search time taken: {time.time() - start_search_time}")
+                if reranker is not None:
+                    reranker.unload_model()
 
                 if batch_sequences:
                     print(f"Batch processing {len(batch_sequences)} sequences with summarizer...")
@@ -526,12 +557,12 @@ if __name__ == "__main__":
 
     parser.add_argument("--summarizer_top_k", type=int, default=10, help="Maximum number of search documents to use.")
 
-    parser.add_argument("--max_doc_len", type=int, default=3000, help="Maximum length of each searched document.")
-
     # Model configuration
     parser.add_argument("--model_path", type=str, required=True, help="Path to the reasoning model.")
 
     parser.add_argument("--gpu_memory_utilization", type=float, default=0.75, help="GPU memory utilization for vLLM.")
+
+    parser.add_argument("--max_tokens_per_webpage", type=int, default=2000, help="Max tokens for each web pages.")
 
     # Sampling parameters
     parser.add_argument("--temperature", type=float, default=0.6, help="Sampling temperature.")
