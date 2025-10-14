@@ -336,7 +336,7 @@ async def evaluate_criteria_async(
 
 
 async def evaluate_response_quality_async(
-    input_data: Dict, eval_criteria: List[str] = [], max_concurrent_requests: int = 100, output_path: str = None
+    input_data: Dict, eval_criteria: List[str] = [], eval_kpr: bool = False, max_concurrent_requests: int = 100, output_path: str = None
 ):
     azure_deployment = os.getenv("AZURE_DEPLOYMENT")
     azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -355,18 +355,10 @@ async def evaluate_response_quality_async(
         for rollout_idx, rollout in enumerate(rollouts):
             flat_questions.append(query)
             flat_final_answers.append(extract_final_information(rollout["output"]))
-            flat_key_points_collection.append(rollout["item"]["key_points"])
             reconstruction_map.append((query, rollout_idx))
+            if eval_kpr:
+                flat_key_points_collection.append(rollout["item"]["key_points"])
 
-    # Evaluate KPR and criteria concurrently
-    kpr_task = evaluate_kpr_async(
-        key_points_collection=flat_key_points_collection,
-        answers=flat_final_answers,
-        client=client,
-        model=azure_deployment,
-        semaphore=semaphore,
-        output_path=output_path,
-    )
     criteria_task = evaluate_criteria_async(
         questions=flat_questions,
         answers=flat_final_answers,
@@ -376,8 +368,16 @@ async def evaluate_response_quality_async(
         semaphore=semaphore,
         output_path=output_path,
     )
-
-    eval_kpr_results, eval_criteria_results = await asyncio.gather(kpr_task, criteria_task)
+    if eval_kpr:
+        kpr_task = evaluate_kpr_async(
+            client=client,
+            model=azure_deployment,
+            semaphore=semaphore,
+            output_path=output_path,
+        )
+        eval_kpr_results, eval_criteria_results = await asyncio.gather(kpr_task, criteria_task)
+    else:
+        eval_criteria_results = await criteria_task
 
     # Reconstruct the results
     results = {}
@@ -389,8 +389,9 @@ async def evaluate_response_quality_async(
 
         original_rollout = input_data[query][rollout_idx]
         results[query][rollout_idx] = original_rollout.copy()
-        results[query][rollout_idx]["kpr"] = eval_kpr_results[i]
         results[query][rollout_idx]["criteria_evaluation"] = eval_criteria_results[i]
+        if eval_kpr:
+            results[query][rollout_idx]["kpr_evaluation"] = eval_kpr_results[i]
 
     return results
 
