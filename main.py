@@ -143,6 +143,7 @@ model_path = "Qwen/Qwen3-4B-Thinking-2507"
 
 max_search_limit = 10
 max_turns = 15
+max_rollouts = 2
 max_tokens_per_webpage = 2000
 max_tokens = 20480
 temperature = 0.6
@@ -257,146 +258,156 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
     else:
         reranked_results = search_results
 
-    print("Generating initial search summary...")
-    initial_search_documents = generate_ref_id(set(), reranked_results)
-    initial_search_summary = summarizer(
-        previous_reasoning=None, search_query=question, documents=initial_search_documents
-    )
-    print("Initial search summary generated.")
+    for rollout_count in range(max_rollouts):
+        print(f"Starting rollout {rollout_count + 1}...")
 
-    instruction = get_qa_instruction(max_search_limit, question, initial_search_summary)
-    prompt = [{"role": "user", "content": instruction}]
-    prompt = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
-
-    output = ""
-    search_count = 0
-    executed_search_queries = set()
-    executed_search_urls = {ref_id: data["url"] for ref_id, data in initial_search_documents.items()}
-
-    for turn in range(max_turns):
-        print(f"Starting turn {turn + 1}...")
-
-        print("Generating response...")
-        print(f"Prompt: {prompt + output}")
-        turn_output = (
-            run_generation_openai(
-                prompt=prompt + output,
-                client=client,
-                model=model_path,
-                tokenizer=tokenizer,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                top_k_sampling=top_k_sampling,
-                stop=[END_SEARCH_QUERY, tokenizer.eos_token],
-            )
-            .choices[0]
-            .text
+        print("Generating initial search summary...")
+        initial_search_documents = generate_ref_id(set(), reranked_results)
+        initial_search_summary = summarizer(
+            previous_reasoning=None, search_query=question, documents=initial_search_documents
         )
-        print("Response generated.")
-        print(f"Output: {turn_output}")
+        print("Initial search summary generated.")
 
-        output += turn_output
+        instruction = get_qa_instruction(max_search_limit, question, initial_search_summary)
+        prompt = [{"role": "user", "content": instruction}]
+        prompt = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
 
-        search_query = extract_between_tags(turn_output, BEGIN_SEARCH_QUERY, END_SEARCH_QUERY)
+        output = "" if rollout_count == 0 else "Restarting...\n"
+        search_count = 0
+        executed_search_queries = set()
+        executed_search_urls = {ref_id: data["url"] for ref_id, data in initial_search_documents.items()}
 
-        if search_query and output.rstrip().endswith(END_SEARCH_QUERY):
-            if search_count < max_search_limit and search_query not in executed_search_queries:
-                print(f"Performing search {search_count + 1} with query: {search_query}")
-                for search_retry_count in range(max_search_retries):
-                    try:
-                        search_results = retriever(search_query)
-                        print(f"Retrieved {len(search_results)} documents.")
-                        break
-                    except Exception:
-                        if search_retry_count < max_search_retries - 1:
-                            interval = 10 * 2**search_retry_count
-                            print(f"Search failed. Trying after {interval} seconds...")
-                            time.sleep(interval)
-                else:
-                    search_results = []
-                    print("Retriever failed. Proceeding with zero documents.")
+        for turn in range(max_turns):
+            print(f"Starting turn {turn + 1}...")
 
-                if reranker is not None and len(search_results) > 0:
-                    print("Reranking search results...")
-                    reranked_results, _ = reranker(search_query, search_results)
-                    print(f"Reranked {len(reranked_results)} documents.")
-                else:
-                    reranked_results = search_results
-
-                existing_ids = executed_search_urls.keys()
-                search_documents = generate_ref_id(existing_ids, reranked_results)
-                executed_search_urls.update({ref_id: data["url"] for ref_id, data in search_documents.items()})
-
-                search_count += 1
-                executed_search_queries.add(search_query)
-
-                all_reasoning_steps = output.replace("\n\n", "\n").split("\n")
-                all_reasoning_steps = [f"Step {i + 1}: {step}" for i, step in enumerate(all_reasoning_steps)]
-
-                if len(all_reasoning_steps) < 5:
-                    reasoning_steps = all_reasoning_steps
-                else:
-                    reasoning_steps = []
-                    for i, reasoning_step in enumerate(all_reasoning_steps):
-                        if (
-                            i == 0
-                            or i > len(all_reasoning_steps) - 4
-                            or BEGIN_SEARCH_QUERY in reasoning_step
-                            or BEGIN_SEARCH_RESULT in reasoning_step
-                        ):
-                            reasoning_steps.append(reasoning_step)
-                        elif reasoning_steps[-1] != "...":
-                            reasoning_steps.append("...")
-
-                print("Generating search summary...")
-                webpage_summary = summarizer(
-                    previous_reasoning="\n\n".join(reasoning_steps),
-                    search_query=search_query,
-                    documents=search_documents,
-                    max_retry=20,
+            print("Generating response...")
+            print(f"Prompt: {prompt + output}")
+            turn_output = (
+                run_generation_openai(
+                    prompt=prompt + output,
+                    client=client,
+                    model=model_path,
+                    tokenizer=tokenizer,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    top_k_sampling=top_k_sampling,
+                    stop=[END_SEARCH_QUERY, tokenizer.eos_token],
                 )
-                print("Search summary generated.")
-                print(f"Summarizer output: {webpage_summary}")
+                .choices[0]
+                .text
+            )
+            print("Response generated.")
+            print(f"Output: {turn_output}")
 
-                append_text = f"\n\n{BEGIN_SEARCH_RESULT}{webpage_summary}{END_SEARCH_RESULT}\n\n"
-                output += append_text
+            output += turn_output
 
-            elif search_count >= max_search_limit:
-                limit_message = f"\n{BEGIN_SEARCH_RESULT}\nThe maximum search limit is exceeded. You are not allowed to search.\n{END_SEARCH_RESULT}\n"
-                output += limit_message
-            elif search_query in executed_search_queries:
-                limit_message = f"\n{BEGIN_SEARCH_RESULT}\nYou have searched this query. Please refer to previous results.\n{END_SEARCH_RESULT}\n"
-                output += limit_message
+            search_query = extract_between_tags(turn_output, BEGIN_SEARCH_QUERY, END_SEARCH_QUERY)
 
-            intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
-            ref_id2idx, urls = extract_citations(intermediate_steps, executed_search_urls)
-            for ref_id, idx in ref_id2idx.items():
-                intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
+            if search_query and output.rstrip().endswith(END_SEARCH_QUERY):
+                if search_count < max_search_limit and search_query not in executed_search_queries:
+                    print(f"Performing search {search_count + 1} with query: {search_query}")
+                    for search_retry_count in range(max_search_retries):
+                        try:
+                            search_results = retriever(search_query)
+                            print(f"Retrieved {len(search_results)} documents.")
+                            break
+                        except Exception:
+                            if search_retry_count < max_search_retries - 1:
+                                interval = 10 * 2**search_retry_count
+                                print(f"Search failed. Trying after {interval} seconds...")
+                                time.sleep(interval)
+                    else:
+                        search_results = []
+                        print("Retriever failed. Proceeding with zero documents.")
 
-            yield {
-                "intermediate_steps": intermediate_steps,
-                "final_report": None,
-                "is_intermediate": True,
-                "complete": False,
-                "citations": urls,
-            }
-        else:
-            intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
-            ref_id2idx, urls = extract_citations(intermediate_steps, executed_search_urls)
-            for ref_id, idx in ref_id2idx.items():
-                intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
+                    if reranker is not None and len(search_results) > 0:
+                        print("Reranking search results...")
+                        reranked_results, _ = reranker(search_query, search_results)
+                        print(f"Reranked {len(reranked_results)} documents.")
+                    else:
+                        reranked_results = search_results
 
-            yield {
-                "intermediate_steps": intermediate_steps,
-                "final_report": None,
-                "is_intermediate": False,
-                "complete": False,
-                "citations": urls,
-            }
+                    existing_ids = executed_search_urls.keys()
+                    search_documents = generate_ref_id(existing_ids, reranked_results)
+                    executed_search_urls.update({ref_id: data["url"] for ref_id, data in search_documents.items()})
+
+                    search_count += 1
+                    executed_search_queries.add(search_query)
+
+                    all_reasoning_steps = output.replace("\n\n", "\n").split("\n")
+                    all_reasoning_steps = [f"Step {i + 1}: {step}" for i, step in enumerate(all_reasoning_steps)]
+
+                    if len(all_reasoning_steps) < 5:
+                        reasoning_steps = all_reasoning_steps
+                    else:
+                        reasoning_steps = []
+                        for i, reasoning_step in enumerate(all_reasoning_steps):
+                            if (
+                                i == 0
+                                or i > len(all_reasoning_steps) - 4
+                                or BEGIN_SEARCH_QUERY in reasoning_step
+                                or BEGIN_SEARCH_RESULT in reasoning_step
+                            ):
+                                reasoning_steps.append(reasoning_step)
+                            elif reasoning_steps[-1] != "...":
+                                reasoning_steps.append("...")
+
+                    print("Generating search summary...")
+                    webpage_summary = summarizer(
+                        previous_reasoning="\n\n".join(reasoning_steps),
+                        search_query=search_query,
+                        documents=search_documents,
+                        max_retry=20,
+                    )
+                    print("Search summary generated.")
+                    print(f"Summarizer output: {webpage_summary}")
+
+                    append_text = f"\n\n{BEGIN_SEARCH_RESULT}{webpage_summary}{END_SEARCH_RESULT}\n\n"
+                    output += append_text
+
+                elif search_count >= max_search_limit:
+                    limit_message = f"\n{BEGIN_SEARCH_RESULT}\nThe maximum search limit is exceeded. You are not allowed to search.\n{END_SEARCH_RESULT}\n"
+                    output += limit_message
+                elif search_query in executed_search_queries:
+                    limit_message = f"\n{BEGIN_SEARCH_RESULT}\nYou have searched this query. Please refer to previous results.\n{END_SEARCH_RESULT}\n"
+                    output += limit_message
+
+                intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
+                ref_id2idx, urls = extract_citations(intermediate_steps, executed_search_urls)
+                for ref_id, idx in ref_id2idx.items():
+                    intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
+
+                yield {
+                    "intermediate_steps": intermediate_steps,
+                    "final_report": None,
+                    "is_intermediate": True,
+                    "complete": False,
+                    "citations": urls,
+                }
+            else:
+                intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
+                ref_id2idx, urls = extract_citations(intermediate_steps, executed_search_urls)
+                for ref_id, idx in ref_id2idx.items():
+                    intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
+
+                yield {
+                    "intermediate_steps": intermediate_steps,
+                    "final_report": None,
+                    "is_intermediate": False,
+                    "complete": False,
+                    "citations": urls,
+                }
+                break
+
+        final_report = extract_final_answer(output)
+        if final_report != "":
+            print("Final answer found. Exiting rollouts.")
             break
-
-    final_report = extract_final_answer(output)
+        elif rollout_count < max_rollouts - 1:
+            print("No final answer found. Starting a new rollout...")
+    else:
+        print("No final answer found after maximum rollouts. Returning an empty answer.")
 
     intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
     ref_id2idx, urls = extract_citations(intermediate_steps + final_report, executed_search_urls)
