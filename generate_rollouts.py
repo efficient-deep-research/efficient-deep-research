@@ -7,7 +7,7 @@ import re
 import time
 import types
 
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoConfig
 
 from search.rerankers import load_reranker
 from search.retrievers import load_retriever
@@ -193,7 +193,9 @@ def main(args: argparse.Namespace):
     # Initialize summarizer
     summarizer = Summarizer(
         llm=llm,
+        tokenizer=tokenizer,
         top_k=args.summarizer_top_k,
+        max_tokens_per_webpage=args.max_tokens_per_webpage,
         max_tokens=args.summarizer_max_tokens,
         temperature=args.summarizer_temperature,
         top_p=args.summarizer_top_p,
@@ -231,6 +233,7 @@ def main(args: argparse.Namespace):
     while rollout_id < rollout_num:
         print(f"\n===================Rollout {rollout_id + 1} of {rollout_num}===================")
 
+        # Initialize active sequences and batch output records
         if not is_rollout_initialized:
             output_dir = make_output_dir(output_dir_base, dataset_name, rollout_id)
             initial_active_sequences_path = os.path.join(
@@ -255,31 +258,43 @@ def main(args: argparse.Namespace):
                 questions = [item["Question"] for item in data]
 
                 # perform initial search for all questions
-                batch_initial_search_documents = []
-                for question in questions:
-                    try:
-                        print(f'Executing search for query: "{question}"')
-                        search_results = retriever(question)
-                    except Exception as e:
-                        print(f'Search failed for query "{question}": {e}')
-                        search_results = []
+                batch_initial_search_documents_path = os.path.join(
+                    output_dir_base, dataset_name, f"batch_initial_search_documents.json"
+                )
+                if os.path.exists(batch_initial_search_documents_path):
+                    print(f"Loading initial search documents from {batch_initial_search_documents_path}")
+                    with open(batch_initial_search_documents_path, "r", encoding="utf-8") as f:
+                        batch_initial_search_documents = json.load(f)
+                else:
+                    batch_initial_search_documents = []
+                    for question in questions:
+                        try:
+                            print(f'Executing search for query: "{question}"')
+                            search_results = retriever(question)
+                        except Exception as e:
+                            print(f'Search failed for query "{question}": {e}')
+                            search_results = []
 
-                    if reranker is not None and len(search_results) > 0:
-                        print("Reranking search results")
-                        reranked_results, _ = reranker(question, search_results)
-                    else:
-                        reranked_results = search_results
+                        if reranker is not None and len(search_results) > 0:
+                            print("Reranking search results")
+                            reranked_results, _ = reranker(question, search_results)
+                        else:
+                            reranked_results = search_results
 
-                    # attend unique hash ids to each webpage
-                    initial_search_documents = generate_ref_id(set(), reranked_results)
+                        # attend unique hash ids to each webpage
+                        initial_search_documents = generate_ref_id(set(), reranked_results)
 
-                    batch_initial_search_documents.append(initial_search_documents)
+                        batch_initial_search_documents.append(initial_search_documents)
+
+                    with open(batch_initial_search_documents_path, "w", encoding="utf-8") as f:
+                        json.dump(batch_initial_search_documents, f, ensure_ascii=False, indent=2)
 
                 initial_search_summaries = summarizer(
                     previous_reasonings=[],  # empty list for initial search
                     search_queries=questions,
                     documents=batch_initial_search_documents,
                     batch_output_records=batch_output_records,  # Pass the collection list
+                    max_retry=20,
                 )
 
                 active_sequences, input_list = prepare_input_prompts(
@@ -299,7 +314,6 @@ def main(args: argparse.Namespace):
 
         is_rollout_initialized = False
 
-        # Initialize collection structure
         start_time = time.time()
         turn = start_turn
         unfinished = True
@@ -348,62 +362,66 @@ def main(args: argparse.Namespace):
                         if seq["search_count"] < max_search_limit and search_query not in set(
                             seq["executed_search_queries"]
                         ):
-                            try:
-                                print(f'Executing search for query: "{search_query}"')
-                                search_results = retriever(search_query)
-                            except Exception as e:
-                                print(f'Search failed for query "{search_query}": {e}')
-                                search_results = []
-
-                            if reranker is not None and len(search_results) > 0:
-                                print("Reranking search results")
-                                reranked_results, _ = reranker(search_query, search_results)
+                            if search_query in set(args.continual_search_queries):
+                                print(f'Detected continual search query: "{search_query}"')
+                                seq["all_info"].append({f"turn_{turn}_continuation": f'Continual search query detected: "{search_query}"'})
                             else:
-                                reranked_results = search_results
+                                try:
+                                    print(f'Executing search for query: "{search_query}"')
+                                    search_results = retriever(search_query)
+                                except Exception as e:
+                                    print(f'Search failed for query "{search_query}": {e}')
+                                    search_results = []
 
-                            # attend unique hash ids to each webpage
-                            existing_ids = seq["executed_search_urls"].keys()
-                            search_documents = generate_ref_id(existing_ids, reranked_results)
-                            seq["executed_search_urls"].update(
-                                {ref_id: data["url"] for ref_id, data in search_documents.items()}
-                            )
+                                if reranker is not None and len(search_results) > 0:
+                                    print("Reranking search results")
+                                    reranked_results, _ = reranker(search_query, search_results)
+                                else:
+                                    reranked_results = search_results
 
-                            all_reasoning_steps = seq["output"]
-                            all_reasoning_steps = all_reasoning_steps.replace("\n\n", "\n").split("\n")
+                                # attend unique hash ids to each webpage
+                                existing_ids = seq["executed_search_urls"].keys()
+                                search_documents = generate_ref_id(existing_ids, reranked_results)
+                                seq["executed_search_urls"].update(
+                                    {ref_id: data["url"] for ref_id, data in search_documents.items()}
+                                )
 
-                            truncated_prev_reasoning = ""
-                            for i, step in enumerate(all_reasoning_steps):
-                                truncated_prev_reasoning += f"Step {i + 1}: {step}\n\n"
+                                all_reasoning_steps = seq["output"]
+                                all_reasoning_steps = all_reasoning_steps.replace("\n\n", "\n").split("\n")
 
-                            prev_steps = truncated_prev_reasoning.split("\n\n")
-                            if len(prev_steps) <= 5:
-                                truncated_prev_reasoning = "\n\n".join(prev_steps)
-                            else:
                                 truncated_prev_reasoning = ""
-                                for i, step in enumerate(prev_steps):
-                                    if (
-                                        i == 0
-                                        or i >= len(prev_steps) - 4
-                                        or BEGIN_SEARCH_QUERY in step
-                                        or BEGIN_SEARCH_RESULT in step
-                                    ):
-                                        truncated_prev_reasoning += step + "\n\n"
-                                    else:
-                                        if truncated_prev_reasoning[-len("\n\n...\n\n") :] != "\n\n...\n\n":
-                                            truncated_prev_reasoning += "...\n\n"
-                            truncated_prev_reasoning = truncated_prev_reasoning.strip("\n")
+                                for i, step in enumerate(all_reasoning_steps):
+                                    truncated_prev_reasoning += f"Step {i + 1}: {step}\n\n"
 
-                            # Collect parameters for batch processing
-                            batch_original_questions.append(seq["item"]["Question"])
-                            batch_prev_reasonings.append(truncated_prev_reasoning)
-                            batch_search_queries.append(search_query)
-                            batch_documents.append(search_documents)
-                            batch_sequences.append(seq)
+                                prev_steps = truncated_prev_reasoning.split("\n\n")
+                                if len(prev_steps) <= 5:
+                                    truncated_prev_reasoning = "\n\n".join(prev_steps)
+                                else:
+                                    truncated_prev_reasoning = ""
+                                    for i, step in enumerate(prev_steps):
+                                        if (
+                                            i == 0
+                                            or i >= len(prev_steps) - 4
+                                            or BEGIN_SEARCH_QUERY in step
+                                            or BEGIN_SEARCH_RESULT in step
+                                        ):
+                                            truncated_prev_reasoning += step + "\n\n"
+                                        else:
+                                            if truncated_prev_reasoning[-len("\n\n...\n\n") :] != "\n\n...\n\n":
+                                                truncated_prev_reasoning += "...\n\n"
+                                truncated_prev_reasoning = truncated_prev_reasoning.strip("\n")
 
-                            # Update search count and executed queries
-                            seq["search_count"] += 1
-                            seq["executed_search_queries"].append(search_query)
+                                # Collect parameters for batch processing
+                                batch_original_questions.append(seq["item"]["Question"])
+                                batch_prev_reasonings.append(truncated_prev_reasoning)
+                                batch_search_queries.append(search_query)
+                                batch_documents.append(search_documents)
+                                batch_sequences.append(seq)
 
+                                # Update search count and executed queries
+                                seq["search_count"] += 1
+                                seq["executed_search_queries"].append(search_query)
+                        
                         elif seq["search_count"] >= max_search_limit:
                             limit_message = f"\n{BEGIN_SEARCH_RESULT}\nThe maximum search limit is exceeded. You are not allowed to search.\n{END_SEARCH_RESULT}\n"
                             seq["prompt"] += limit_message
@@ -526,12 +544,14 @@ if __name__ == "__main__":
 
     parser.add_argument("--summarizer_top_k", type=int, default=10, help="Maximum number of search documents to use.")
 
-    parser.add_argument("--max_doc_len", type=int, default=3000, help="Maximum length of each searched document.")
+    parser.add_argument("--continual_search_queries", nargs="+", default=["...", "query", "Enter your query here", "and", "[query]", "query here", "[Your search query]"], help="List of search queries that trigger continuation of generation without performing search when detected.")
 
     # Model configuration
     parser.add_argument("--model_path", type=str, required=True, help="Path to the reasoning model.")
 
     parser.add_argument("--gpu_memory_utilization", type=float, default=0.75, help="GPU memory utilization for vLLM.")
+
+    parser.add_argument("--max_tokens_per_webpage", type=int, default=2000, help="Max tokens for each web pages.")
 
     # Sampling parameters
     parser.add_argument("--temperature", type=float, default=0.6, help="Sampling temperature.")

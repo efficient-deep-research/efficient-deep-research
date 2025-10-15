@@ -22,12 +22,13 @@ def extract_final_information(output: str) -> str:
 
 
 def extract_between_tags(text: str, start_tag: str, end_tag: str) -> str | None:
-    pattern = re.escape(start_tag) + r"(.*?)" + re.escape(end_tag)
+    escaped_start = re.escape(start_tag)
+    escaped_end = re.escape(end_tag)
+    pattern = escaped_start + r"((?:(?!" + escaped_start + r").)*?)" + escaped_end
     matches = re.findall(pattern, text, flags=re.DOTALL)
     if matches:
         return matches[-1].strip()
     return None
-
 
 def run_generation(
     prompts: list[str],
