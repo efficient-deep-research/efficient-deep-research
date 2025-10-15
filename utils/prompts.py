@@ -25,7 +25,7 @@ def get_qa_instruction(MAX_SEARCH_LIMIT: int, question: str, initial_search_resu
 - Provide a long-form response; short answers are strictly not allowed.
 *Inputs*
 - ===initial_search_result===
-f{initial_search_result}
+{initial_search_result}
 - ===question===
-f{question}
+{question}
 I'm confident you'll deliver the correct answer—step by step and precise."""

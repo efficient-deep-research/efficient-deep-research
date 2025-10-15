@@ -27,6 +27,10 @@ original_datasets/dataset_for_dpo/
 synthesized_dataset/validation_set_300/
 synthesized_dataset/researchy_questions_top3700/
 synthesized_dataset/natural_question_random_1000/
+synthesized_dataset/.gitattributes
+synthesized_dataset/20251012/
+synthesized_dataset/stored_tokens
+synthesized_dataset/token
 
 # job script
 job.sh
