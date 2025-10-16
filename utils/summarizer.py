@@ -2,10 +2,13 @@ import json
 import logging
 import re
 
-from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer
 
-from search.data import Document
+
+try:
+    from vllm import LLM, SamplingParams
+except ImportError:
+    pass
 
 
 logger = logging.getLogger(__name__)
@@ -14,7 +17,7 @@ logger = logging.getLogger(__name__)
 class Summarizer:
     def __init__(
         self,
-        llm: LLM,
+        llm: "LLM",
         tokenizer: AutoTokenizer,
         top_k: int,
         max_tokens_per_webpage: int,
@@ -95,26 +98,26 @@ class Summarizer:
                 batch_output_records.append({"prompt": p, "raw_output": r.outputs[0].text, "extracted_info": e})
 
         return results
-   
+
     @staticmethod
     def _delete_invalid_spaces(text):
         citation_pattern = r"\([^)]*#[0-9a-f]{4}[^)]*\)"
-        
+
         if text is None:
             return None
-    
+
         def normalize_citation(match):
             citation = match.group()
             content = citation[1:-1]
             normalized_content = content.strip().replace(" ", "")
             return f"({normalized_content})"
-    
+
         normalized_text = re.sub(citation_pattern, normalize_citation, text)
         return normalized_text
 
     def _validate_citation_format(self, text: str, valid_ids: list[str]) -> dict:
         results = {"is_valid": True, "errors": []}
-        
+
         if text is None:
             results["is_valid"] = False
             results["errors"].append("**Final answer format error**")
@@ -170,7 +173,7 @@ class Summarizer:
             # token length check
             tokenized_doc = self.tokenizer(data["text"])["input_ids"]
             if len(tokenized_doc) > self.max_tokens_per_webpage:
-                tokenized_doc = tokenized_doc[:self.max_tokens_per_webpage]  # truncate
+                tokenized_doc = tokenized_doc[: self.max_tokens_per_webpage]  # truncate
                 doc_text = self.tokenizer.decode(tokenized_doc, skip_special_tokens=True)
                 logger.info(f"Document {ref_id} is truncated to fit the token limit.")
             else:

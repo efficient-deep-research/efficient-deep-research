@@ -12,8 +12,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     --mount=type=bind,source=.python-version,target=.python-version \
     uv sync --locked --no-install-project
-RUN uv pip install torch
-RUN uv pip install vllm --torch-backend=auto
+RUN uv pip install torch==2.8.0
 RUN uv pip install flash-attn --no-build-isolation
 
 # Copy the project into the image
