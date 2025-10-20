@@ -171,6 +171,14 @@ openai_api_key = os.getenv("OPENAI_API_KEY")
 openai_api_base = os.getenv("OPENAI_API_BASE")
 client = OpenAI(api_key=openai_api_key, base_url=openai_api_base)
 
+summarizer_openai_base = os.getenv("SUMMARIZER_OPENAI_API_BASE")
+if summarizer_openai_base:
+    print("Setting up OpenAI API for summarizer...")
+    summarizer_openai_key = os.getenv("SUMMARIZER_OPENAI_API_KEY")
+    summarizer_client = OpenAI(api_key=summarizer_openai_key, base_url=summarizer_openai_base)
+else:
+    summarizer_client = client
+
 print("Loading tokenizer...")
 tokenizer = load_tokenizer(model_path)
 
@@ -186,7 +194,7 @@ if reranker_name is not None:
 
 print("Loading summarizer...")
 summarizer = OpenAISummarizer(
-    client=client,
+    client=summarizer_client,
     model=model_path,
     tokenizer=tokenizer,
     top_k=summarizer_top_k,
