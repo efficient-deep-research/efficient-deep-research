@@ -43,3 +43,4 @@ download/
 training/logs/
 training/output/
 training/wandb/
+training/data/

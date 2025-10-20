@@ -11,8 +11,8 @@ set -euxo pipefail
 # ========== 基本パス ==========
 source $PBS_O_WORKDIR/scripts/config.sh
 
-DATASET_NAME="preference_data.jsonl"
-OUTPUT_NAME="preferences_data_example1000.jsonl"
+DATASET_NAME="train_0_5_origin.jsonl"
+OUTPUT_NAME="train_0_5_processed.jsonl"
 
 singularity exec \
     --nv \

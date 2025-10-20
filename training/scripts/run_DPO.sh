@@ -17,7 +17,7 @@ export WANDB_PROJECT="efficient-deep-research"
 export WANDB_NAME="$PBS_JOBID"
 
 # ========== dataset ==========
-DATASET_NAME="preferences_data_example1000.jsonl"
+DATASET_NAME="train_0_5_processed.jsonl"
 
 # ========== ログ ==========
 LOG_FILE="$LOG_DIR/$PBS_JOBID.log"
