@@ -2,7 +2,7 @@
   "rlhf_type": "dpo",
   "train_type": "full",
   "model": "Qwen/Qwen3-Next-80B-A3B-Thinking",
-  "split_dataset_ratio": 0.01,
+  "split_dataset_ratio": 0.1,
   "torch_dtype": "bfloat16",
   "eval_steps": 100,
   "save_steps": 100,
