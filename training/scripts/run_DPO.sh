@@ -1,10 +1,10 @@
 #!/bin/bash
 #PBS -q rt_HF
 #PBS -l select=1
-#PBS -l walltime=1:00:00
+#PBS -l walltime=10:00:00
 #PBS -P gcd50664
 #PBS -k oe
-#PBS -N run_DPO
+#PBS -N run_score_gap_0_5
 #PBS -m abe
 
 set -euxo pipefail
@@ -30,6 +30,16 @@ readarray -t TRAIN_ARGS < <(
   jq -r 'to_entries[] | "--\(.key)\n\(.value)"' "$CONFIG_FILE"
 )
 TRAIN_ARGS+=(--output_dir "$OUTPUT_DIR" --report_to wandb --dataset "$PBS_O_WORKDIR/data/$DATASET_NAME" --use_hf true)
+
+# ========== Training meta parameters ==========
+TRAIN_ARGS+=(--num_train_epochs 1)
+TRAIN_ARGS+=(--per_device_train_batch_size 1)
+TRAIN_ARGS+=(--per_device_eval_batch_size 1)
+
+# ========== DPO hyperparameters ==========
+TRAIN_ARGS+=(--learning_rate 1e-5)
+TRAIN_ARGS+=(--gradient_accumulation_steps 16)
+TRAIN_ARGS+=(--warmup_ratio 0.05)
 
 # ========== 実行 ==========
 mkdir -p "$OUTPUT_DIR"
