@@ -165,6 +165,10 @@ summarizer_max_tokens = 8192
 summarizer_temperature = 0.6
 summarizer_top_p = 0.95
 
+continual_search_queries = set(
+    ["...", "query", "Enter your query here", "and", "[query]", "query here", "[Your search query]"]
+)
+
 
 print("Setting up OpenAI API...")
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -315,65 +319,68 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
             if search_query and output.rstrip().endswith(END_SEARCH_QUERY):
                 if search_count < max_search_limit and search_query not in executed_search_queries:
                     print(f"Performing search {search_count + 1} with query: {search_query}")
-                    for search_retry_count in range(max_search_retries):
-                        try:
-                            search_results = retriever(search_query)
-                            print(f"Retrieved {len(search_results)} documents.")
-                            break
-                        except Exception:
-                            if search_retry_count < max_search_retries - 1:
-                                interval = 10 * 2**search_retry_count
-                                print(f"Search failed. Trying after {interval} seconds...")
-                                time.sleep(interval)
+
+                    if search_query in continual_search_queries:
+                        print(f'Detected continual search query: "{search_query}"')
                     else:
-                        search_results = []
-                        print("Retriever failed. Proceeding with zero documents.")
+                        for search_retry_count in range(max_search_retries):
+                            try:
+                                search_results = retriever(search_query)
+                                print(f"Retrieved {len(search_results)} documents.")
+                                break
+                            except Exception:
+                                if search_retry_count < max_search_retries - 1:
+                                    interval = 10 * 2**search_retry_count
+                                    print(f"Search failed. Trying after {interval} seconds...")
+                                    time.sleep(interval)
+                        else:
+                            search_results = []
+                            print("Retriever failed. Proceeding with zero documents.")
 
-                    if reranker is not None and len(search_results) > 0:
-                        print("Reranking search results...")
-                        reranked_results, _ = reranker(search_query, search_results)
-                        print(f"Reranked {len(reranked_results)} documents.")
-                    else:
-                        reranked_results = search_results
+                        if reranker is not None and len(search_results) > 0:
+                            print("Reranking search results...")
+                            reranked_results, _ = reranker(search_query, search_results)
+                            print(f"Reranked {len(reranked_results)} documents.")
+                        else:
+                            reranked_results = search_results
 
-                    existing_ids = executed_search_urls.keys()
-                    search_documents = generate_ref_id(existing_ids, reranked_results)
-                    executed_search_urls.update({ref_id: data["url"] for ref_id, data in search_documents.items()})
+                        existing_ids = executed_search_urls.keys()
+                        search_documents = generate_ref_id(existing_ids, reranked_results)
+                        executed_search_urls.update({ref_id: data["url"] for ref_id, data in search_documents.items()})
 
-                    search_count += 1
-                    executed_search_queries.add(search_query)
+                        search_count += 1
+                        executed_search_queries.add(search_query)
 
-                    all_reasoning_steps = output.replace("\n\n", "\n").split("\n")
-                    all_reasoning_steps = [f"Step {i + 1}: {step}" for i, step in enumerate(all_reasoning_steps)]
+                        all_reasoning_steps = output.replace("\n\n", "\n").split("\n")
+                        all_reasoning_steps = [f"Step {i + 1}: {step}" for i, step in enumerate(all_reasoning_steps)]
 
-                    if len(all_reasoning_steps) < 5:
-                        reasoning_steps = all_reasoning_steps
-                    else:
-                        reasoning_steps = []
-                        for i, reasoning_step in enumerate(all_reasoning_steps):
-                            if (
-                                i == 0
-                                or i > len(all_reasoning_steps) - 4
-                                or BEGIN_SEARCH_QUERY in reasoning_step
-                                or BEGIN_SEARCH_RESULT in reasoning_step
-                            ):
-                                reasoning_steps.append(reasoning_step)
-                            elif reasoning_steps[-1] != "...":
-                                reasoning_steps.append("...")
+                        if len(all_reasoning_steps) < 5:
+                            reasoning_steps = all_reasoning_steps
+                        else:
+                            reasoning_steps = []
+                            for i, reasoning_step in enumerate(all_reasoning_steps):
+                                if (
+                                    i == 0
+                                    or i > len(all_reasoning_steps) - 4
+                                    or BEGIN_SEARCH_QUERY in reasoning_step
+                                    or BEGIN_SEARCH_RESULT in reasoning_step
+                                ):
+                                    reasoning_steps.append(reasoning_step)
+                                elif reasoning_steps[-1] != "...":
+                                    reasoning_steps.append("...")
 
-                    print("Generating search summary...")
-                    webpage_summary = summarizer(
-                        previous_reasoning="\n\n".join(reasoning_steps),
-                        search_query=search_query,
-                        documents=search_documents,
-                        max_retry=20,
-                    )
-                    print("Search summary generated.")
-                    print(f"Summarizer output: {webpage_summary}")
+                        print("Generating search summary...")
+                        webpage_summary = summarizer(
+                            previous_reasoning="\n\n".join(reasoning_steps),
+                            search_query=search_query,
+                            documents=search_documents,
+                            max_retry=20,
+                        )
+                        print("Search summary generated.")
+                        print(f"Summarizer output: {webpage_summary}")
 
-                    append_text = f"\n\n{BEGIN_SEARCH_RESULT}{webpage_summary}{END_SEARCH_RESULT}\n\n"
-                    output += append_text
-
+                        append_text = f"\n\n{BEGIN_SEARCH_RESULT}{webpage_summary}{END_SEARCH_RESULT}\n\n"
+                        output += append_text
                 elif search_count >= max_search_limit:
                     limit_message = f"\n{BEGIN_SEARCH_RESULT}\nThe maximum search limit is exceeded. You are not allowed to search.\n{END_SEARCH_RESULT}\n"
                     output += limit_message
