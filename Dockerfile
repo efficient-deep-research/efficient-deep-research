@@ -15,6 +15,21 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 RUN uv pip install torch==2.8.0
 RUN uv pip install flash-attn --no-build-isolation
 
+# Pre-download model tokenizer and weights
+ARG MODEL_PATH="Qwen/Qwen3-4B-Thinking-2507"
+ENV MODEL_PATH=$MODEL_PATH
+
+ARG SUMMARIZER_MODEL_PATH=$MODEL_PATH
+ENV SUMMARIZER_MODEL_PATH=$SUMMARIZER_MODEL_PATH
+
+ARG RERANKER_MODEL_PATH="Qwen/Qwen3-Reranker-0.6B"
+ENV RERANKER_MODEL_PATH=$RERANKER_MODEL_PATH
+
+RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${MODEL_PATH}')"
+RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${SUMMARIZER_MODEL_PATH}')"
+RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${RERANKER_MODEL_PATH}')"
+RUN uv run python -c "from transformers import AutoModelForCausalLM; AutoModelForCausalLM.from_pretrained('${RERANKER_MODEL_PATH}')"
+
 # Copy the project into the image
 COPY . /app
 
@@ -23,33 +38,19 @@ COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --inexact
 
-ARG MODEL_PATH="Qwen/Qwen3-4B-Thinking-2507"
-ENV MODEL_PATH=$MODEL_PATH
-
-ARG SUMMARIZER_MODEL_PATH=$MODEL_PATH
-ENV SUMMARIZER_MODEL_PATH=$SUMMARIZER_MODEL_PATH
-
-ARG RERANKER_MODEL_PATH="ContextualAI/ctxl-rerank-v2-instruct-multilingual-1b"
-ENV RERANKER_MODEL_PATH=$RERANKER_MODEL_PATH
-
-RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${MODEL_PATH}')"
-RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${SUMMARIZER_MODEL_PATH}')"
-RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${RERANKER_MODEL_PATH}')"
-RUN uv run python -c "from transformers import AutoModelForCausalLM; AutoModelForCausalLM.from_pretrained('${RERANKER_MODEL_PATH}')"
-
+# Set environment variables for APIs
 ARG OPENAI_API_BASE=""
 ENV OPENAI_API_BASE=$OPENAI_API_BASE
-
 ARG OPENAI_API_KEY=""
 ENV OPENAI_API_KEY=$OPENAI_API_KEY
 
 ARG SUMMARIZER_OPENAI_API_BASE=$OPENAI_API_BASE
 ENV SUMMARIZER_OPENAI_API_BASE=$SUMMARIZER_OPENAI_API_BASE
-
 ARG SUMMARIZER_OPENAI_API_KEY=$OPENAI_API_KEY
 ENV SUMMARIZER_OPENAI_API_KEY=$SUMMARIZER_OPENAI_API_KEY
 
 ARG RETRIEVER_API_KEY=""
 ENV RETRIEVER_API_KEY=$RETRIEVER_API_KEY
 
+# Run the FastAPI application
 CMD ["/app/.venv/bin/fastapi", "run", "main.py", "--port", "8000", "--host", "0.0.0.0"]

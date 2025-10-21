@@ -146,22 +146,22 @@ print("MODEL_PATH:", model_path)
 print("SUMMARIZER_MODEL_PATH:", summarizer_model_path)
 print("RERANKER_MODEL_PATH:", reranker_model_path)
 
-max_search_limit = 10
+max_search_limit = 5
 max_turns = 15
-max_rollouts = 2
-max_tokens_per_webpage = 2000
+max_rollouts = 3
+max_tokens_per_webpage = 4096
 max_tokens = 20480
 temperature = 0.6
 top_p = 0.95
-top_k_sampling = 40
+top_k_sampling = 20
 
 retriever_name = "clueweb22-a"
-retriever_top_k = 1000
+retriever_top_k = 300
 retriever_kwargs = "{}"
 max_search_retries = 5
 
-reranker_name = "contextualai"
-reranker_max_tokens = 1024
+reranker_name = "qwen3"
+reranker_max_tokens = 4096
 reranker_batch_size = 1
 reranker_kwargs = "{}"
 
@@ -434,6 +434,15 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
     for ref_id, idx in ref_id2idx.items():
         intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
         final_report = final_report.replace(ref_id, f"[{idx + 1}]")
+
+    print("Cleaning up reference IDs...")
+    intermediate_steps = re.sub(r"\#[a-zA-Z0-9_]{4,}", "", intermediate_steps)
+    final_report = re.sub(r"\#[a-zA-Z0-9_]{4,}", "", final_report)
+    for match in re.finditer(r"\((\s*\[\d+\]\s*,?)*\)", intermediate_steps + final_report):
+        match_text = match.group(0)
+        formatted_text = match_text.replace(",", "").replace(" ", "").strip("()")
+        intermediate_steps = intermediate_steps.replace(match_text, formatted_text)
+        final_report = final_report.replace(match_text, formatted_text)
 
     print(f"Final report: {final_report}")
 
