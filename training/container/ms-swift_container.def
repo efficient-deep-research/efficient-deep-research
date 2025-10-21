@@ -13,3 +13,4 @@ From: modelscope-registry.us-west-1.cr.aliyuncs.com/modelscope-repo/modelscope:u
     pip install --upgrade pip
     pip install nvidia-ml-py
     pip install transformers==4.57.1
+    pip uninstall -y autoawq

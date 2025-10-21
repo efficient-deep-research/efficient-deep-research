@@ -1,15 +1,16 @@
 {
   "rlhf_type": "dpo",
-  "train_type": "full",
+  "train_type": "lora",
+  "lora_rank": 16,
+  "lora_alpha": 16,
+  "target_modules": "all-linear",
   "model": "Qwen/Qwen3-Next-80B-A3B-Thinking",
   "split_dataset_ratio": 0.1,
   "torch_dtype": "bfloat16",
-  "eval_steps": 100,
-  "save_steps": 100,
+  "eval_steps": 10,
+  "save_steps": 10,
   "save_total_limit": 2,
-  "logging_steps": 5,
-  "max_length": 2048,
+  "logging_steps": 1,
   "dataloader_num_workers": 4,
-  "dataset_num_proc": 4,
-  "run_name": "base"
+  "dataset_num_proc": 4
 }

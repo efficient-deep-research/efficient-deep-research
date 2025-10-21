@@ -4,7 +4,7 @@
 #PBS -l walltime=10:00:00
 #PBS -P gcd50664
 #PBS -k oe
-#PBS -N run_score_gap_0_5_lora
+#PBS -N run_score_gap_0_5
 #PBS -m abe
 
 set -euxo pipefail
@@ -38,16 +38,14 @@ TRAIN_ARGS+=(--use_hf true)
 TRAIN_ARGS+=(--num_train_epochs 1)
 TRAIN_ARGS+=(--per_device_train_batch_size 1)
 TRAIN_ARGS+=(--per_device_eval_batch_size 1)
-TRAIN_ARGS+=(--max_length 28160)
-# TRAIN_ARGS+=(--deepspeed zero2)
-TRAIN_ARGS+=(--attn_impl flash_attention_2)
+TRAIN_ARGS+=(--max_length 256000)
 
 # ========== DPO hyperparameters ==========
-TRAIN_ARGS+=(--learning_rate 1e-4)
+TRAIN_ARGS+=(--learning_rate 1e-5)
 TRAIN_ARGS+=(--gradient_accumulation_steps 16)
 TRAIN_ARGS+=(--warmup_ratio 0.05)
 
-TRAIN_ARGS+=(--run_name run_score_gap_0_5_lora)
+TRAIN_ARGS+=(--run_name run_score_gap_0_5)
 
 # ========== 実行 ==========
 mkdir -p "$OUTPUT_DIR"
@@ -56,10 +54,12 @@ echo "Output directory: $OUTPUT_DIR"
 echo "Log file: $LOG_FILE"
 nvidia-smi
 
+
 singularity exec \
     --nv \
     --network host \
     --writable-tmpfs \
+    --env TRAIN_ARGS="${TRAIN_ARGS[*]}" \
     --bind $PBS_O_WORKDIR/download:/mnt/workspace \
     "$PBS_O_WORKDIR/container/$SIF_NAME" \
-    python $PBS_O_WORKDIR/src/train_DPO.py "${TRAIN_ARGS[@]}"
+    bash
