@@ -23,20 +23,30 @@ COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --inexact
 
-RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('Qwen/Qwen3-4B-Thinking-2507')"
-RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('ContextualAI/ctxl-rerank-v2-instruct-multilingual-1b')"
-RUN uv run python -c "from transformers import AutoModelForCausalLM; AutoModelForCausalLM.from_pretrained('ContextualAI/ctxl-rerank-v2-instruct-multilingual-1b')"
+ARG MODEL_PATH="Qwen/Qwen3-4B-Thinking-2507"
+ENV MODEL_PATH=$MODEL_PATH
 
-ARG OPENAI_API_BASE="http://host.docker.internal:8001/v1"
+ARG SUMMARIZER_MODEL_PATH=$MODEL_PATH
+ENV SUMMARIZER_MODEL_PATH=$SUMMARIZER_MODEL_PATH
+
+ARG RERANKER_MODEL_PATH="ContextualAI/ctxl-rerank-v2-instruct-multilingual-1b"
+ENV RERANKER_MODEL_PATH=$RERANKER_MODEL_PATH
+
+RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${MODEL_PATH}')"
+RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${SUMMARIZER_MODEL_PATH}')"
+RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${RERANKER_MODEL_PATH}')"
+RUN uv run python -c "from transformers import AutoModelForCausalLM; AutoModelForCausalLM.from_pretrained('${RERANKER_MODEL_PATH}')"
+
+ARG OPENAI_API_BASE=""
 ENV OPENAI_API_BASE=$OPENAI_API_BASE
 
 ARG OPENAI_API_KEY=""
 ENV OPENAI_API_KEY=$OPENAI_API_KEY
 
-ARG SUMMARIZER_OPENAI_API_BASE=""
+ARG SUMMARIZER_OPENAI_API_BASE=$OPENAI_API_BASE
 ENV SUMMARIZER_OPENAI_API_BASE=$SUMMARIZER_OPENAI_API_BASE
 
-ARG SUMMARIZER_OPENAI_API_KEY=""
+ARG SUMMARIZER_OPENAI_API_KEY=$OPENAI_API_KEY
 ENV SUMMARIZER_OPENAI_API_KEY=$SUMMARIZER_OPENAI_API_KEY
 
 ARG RETRIEVER_API_KEY=""

@@ -139,7 +139,12 @@ class OpenAISummarizer(Summarizer):
         return result
 
 
-model_path = "Qwen/Qwen3-4B-Thinking-2507"
+model_path = os.getenv("MODEL_PATH")
+summarizer_model_path = os.getenv("SUMMARIZER_MODEL_PATH")
+reranker_model_path = os.getenv("RERANKER_MODEL_PATH")
+print("MODEL_PATH:", model_path)
+print("SUMMARIZER_MODEL_PATH:", summarizer_model_path)
+print("RERANKER_MODEL_PATH:", reranker_model_path)
 
 max_search_limit = 10
 max_turns = 15
@@ -173,18 +178,18 @@ continual_search_queries = set(
 print("Setting up OpenAI API...")
 openai_api_key = os.getenv("OPENAI_API_KEY")
 openai_api_base = os.getenv("OPENAI_API_BASE")
+print("OPENAI_API_BASE:", openai_api_base)
 client = OpenAI(api_key=openai_api_key, base_url=openai_api_base)
 
+print("Setting up OpenAI API for summarizer...")
 summarizer_openai_base = os.getenv("SUMMARIZER_OPENAI_API_BASE")
-if summarizer_openai_base:
-    print("Setting up OpenAI API for summarizer...")
-    summarizer_openai_key = os.getenv("SUMMARIZER_OPENAI_API_KEY")
-    summarizer_client = OpenAI(api_key=summarizer_openai_key, base_url=summarizer_openai_base)
-else:
-    summarizer_client = client
+summarizer_openai_key = os.getenv("SUMMARIZER_OPENAI_API_KEY")
+print("SUMMARIZER_OPENAI_API_BASE:", summarizer_openai_base)
+summarizer_client = OpenAI(api_key=summarizer_openai_key, base_url=summarizer_openai_base)
 
 print("Loading tokenizer...")
 tokenizer = load_tokenizer(model_path)
+summarizer_tokenizer = load_tokenizer(summarizer_model_path)
 
 print("Loading retriever...")
 retriever = load_retriever(retriever_name, default_k=retriever_top_k, **json.loads(retriever_kwargs))
@@ -199,8 +204,8 @@ if reranker_name is not None:
 print("Loading summarizer...")
 summarizer = OpenAISummarizer(
     client=summarizer_client,
-    model=model_path,
-    tokenizer=tokenizer,
+    model=summarizer_model_path,
+    tokenizer=summarizer_tokenizer,
     top_k=summarizer_top_k,
     max_tokens_per_webpage=max_tokens_per_webpage,
     max_tokens=summarizer_max_tokens,
