@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -q rt_HF
 #PBS -l select=1
-#PBS -l walltime=10:00:00
+#PBS -l walltime=20:00:00
 #PBS -P gcd50664
 #PBS -k oe
 #PBS -N run_score_gap_0_5_lora
