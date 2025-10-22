@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -q rt_HF
 #PBS -l select=1
-#PBS -l walltime=20:00:00
+#PBS -l walltime=8:00:00
 #PBS -P gcd50664
 #PBS -k oe
 #PBS -N run_score_gap_0_5_lora
@@ -48,6 +48,10 @@ TRAIN_ARGS+=(--gradient_accumulation_steps 16)
 TRAIN_ARGS+=(--warmup_ratio 0.05)
 
 TRAIN_ARGS+=(--run_name run_score_gap_0_5_lora)
+
+
+# ========== resume from checkpoint ==========
+TRAIN_ARGS+=(--resume_from_checkpoint $PBS_O_WORKDIR/output/1276612.pbs1/v0-20251021-223456/checkpoint-20)
 
 # ========== 実行 ==========
 mkdir -p "$OUTPUT_DIR"
