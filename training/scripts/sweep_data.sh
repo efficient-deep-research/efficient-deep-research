@@ -8,8 +8,8 @@
 #PBS -m abe
 #PBS -J 1-2
 case $PBS_ARRAY_INDEX in
-    1) BETA=0.01 ;;
-    2) BETA=0.5 ;;
+    1) MARGIN=0_7 ;;
+    2) MARGIN=0_3 ;;
 esac
 
 set -euxo pipefail
@@ -22,7 +22,7 @@ export WANDB_PROJECT="efficient-deep-research"
 export WANDB_NAME="$PBS_JOBID"
 
 # ========== dataset ==========
-DATASET_NAME="train_0_5_processed.jsonl"
+DATASET_NAME="train_${MARGIN}_processed.jsonl"
 
 # ========== ログ ==========
 LOG_FILE="$LOG_DIR/$PBS_JOBID.log"
@@ -51,9 +51,9 @@ TRAIN_ARGS+=(--attn_impl flash_attention_2)
 TRAIN_ARGS+=(--learning_rate 1e-4)
 TRAIN_ARGS+=(--gradient_accumulation_steps 16)
 TRAIN_ARGS+=(--warmup_ratio 0.05)
-TRAIN_ARGS+=(--beta $BETA)
+TRAIN_ARGS+=(--beta 0.5)
 
-TRAIN_ARGS+=(--run_name run_score_gap_0_5_lora_beta_$BETA)
+TRAIN_ARGS+=(--run_name run_score_gap_${MARGIN}_lora_beta_0_5)
 
 
 # ========== resume from checkpoint ==========
