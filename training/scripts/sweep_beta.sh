@@ -1,11 +1,16 @@
 #!/bin/bash
 #PBS -q rt_HF
 #PBS -l select=1
-#PBS -l walltime=8:00:00
+#PBS -l walltime=24:00:00
 #PBS -P gcd50664
 #PBS -k oe
 #PBS -N run_score_gap_0_5_lora
 #PBS -m abe
+#PBS -J 1-2
+case $PBS_ARRAY_INDEX in
+    1) BETA=0.01 ;;
+    2) BETA=0.5 ;;
+esac
 
 set -euxo pipefail
 
@@ -46,8 +51,9 @@ TRAIN_ARGS+=(--attn_impl flash_attention_2)
 TRAIN_ARGS+=(--learning_rate 1e-4)
 TRAIN_ARGS+=(--gradient_accumulation_steps 16)
 TRAIN_ARGS+=(--warmup_ratio 0.05)
+TRAIN_ARGS+=(--beta $BETA)
 
-TRAIN_ARGS+=(--run_name run_score_gap_0_5_lora)
+TRAIN_ARGS+=(--run_name run_score_gap_0_5_lora_beta_$BETA)
 
 
 # ========== resume from checkpoint ==========
