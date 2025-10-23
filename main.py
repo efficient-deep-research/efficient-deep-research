@@ -7,6 +7,7 @@ from typing import Iterator
 
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
+from httpx import BasicAuth, Client
 from openai import OpenAI
 from openai.types import Completion
 from pydantic import BaseModel
@@ -179,13 +180,29 @@ print("Setting up OpenAI API...")
 openai_api_key = os.getenv("OPENAI_API_KEY")
 openai_api_base = os.getenv("OPENAI_API_BASE")
 print("OPENAI_API_BASE:", openai_api_base)
-client = OpenAI(api_key=openai_api_key, base_url=openai_api_base)
+http_client = None
+if os.getenv("OPENAI_API_USERNAME"):
+    print("Configuring custom authentication for OpenAI API...")
+    auth = BasicAuth(username=os.getenv("OPENAI_API_USERNAME"), password=os.getenv("OPENAI_API_PASSWORD"))
+    http_client = Client(auth=auth)
+
+client = OpenAI(api_key=openai_api_key, base_url=openai_api_base, http_client=http_client)
 
 print("Setting up OpenAI API for summarizer...")
 summarizer_openai_base = os.getenv("SUMMARIZER_OPENAI_API_BASE")
 summarizer_openai_key = os.getenv("SUMMARIZER_OPENAI_API_KEY")
 print("SUMMARIZER_OPENAI_API_BASE:", summarizer_openai_base)
-summarizer_client = OpenAI(api_key=summarizer_openai_key, base_url=summarizer_openai_base)
+summarizer_http_client = None
+if os.getenv("SUMMARIZER_OPENAI_API_USERNAME"):
+    print("Configuring custom authentication for Summarizer OpenAI API...")
+    summarizer_auth = BasicAuth(
+        username=os.getenv("SUMMARIZER_OPENAI_API_USERNAME"), password=os.getenv("SUMMARIZER_OPENAI_API_PASSWORD")
+    )
+    summarizer_http_client = Client(auth=summarizer_auth)
+
+summarizer_client = OpenAI(
+    api_key=summarizer_openai_key, base_url=summarizer_openai_base, http_client=summarizer_http_client
+)
 
 print("Loading tokenizer...")
 tokenizer = load_tokenizer(model_path)
