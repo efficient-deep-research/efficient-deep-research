@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -21,6 +22,10 @@ from utils import extract_between_tags, load_tokenizer
 from utils.constants import BEGIN_SEARCH_QUERY, BEGIN_SEARCH_RESULT, END_SEARCH_QUERY, END_SEARCH_RESULT
 from utils.prompts import get_qa_instruction
 from utils.summarizer import Summarizer
+
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 
 class EvaluateRequest(BaseModel):
@@ -148,9 +153,9 @@ class OpenAISummarizer(Summarizer):
 model_path = os.getenv("MODEL_PATH")
 summarizer_model_path = os.getenv("SUMMARIZER_MODEL_PATH")
 reranker_model_path = os.getenv("RERANKER_MODEL_PATH")
-print("MODEL_PATH:", model_path)
-print("SUMMARIZER_MODEL_PATH:", summarizer_model_path)
-print("RERANKER_MODEL_PATH:", reranker_model_path)
+logger.info("MODEL_PATH: %s", model_path)
+logger.info("SUMMARIZER_MODEL_PATH: %s", summarizer_model_path)
+logger.info("RERANKER_MODEL_PATH: %s", reranker_model_path)
 
 max_search_limit = 5
 max_turns = 15
@@ -181,25 +186,25 @@ continual_search_queries = set(
 )
 
 
-print("Setting up OpenAI API...")
+logger.info("Setting up OpenAI API...")
 openai_api_key = os.getenv("OPENAI_API_KEY")
 openai_api_base = os.getenv("OPENAI_API_BASE")
-print("OPENAI_API_BASE:", openai_api_base)
+logger.info("OPENAI_API_BASE: %s", openai_api_base)
 http_client = None
 if os.getenv("OPENAI_API_USERNAME"):
-    print("Configuring custom authentication for OpenAI API...")
+    logger.info("Configuring custom authentication for OpenAI API...")
     auth = BasicAuth(username=os.getenv("OPENAI_API_USERNAME"), password=os.getenv("OPENAI_API_PASSWORD"))
     http_client = Client(auth=auth)
 
 client = OpenAI(api_key=openai_api_key, base_url=openai_api_base, http_client=http_client)
 
-print("Setting up OpenAI API for summarizer...")
+logger.info("Setting up OpenAI API for summarizer...")
 summarizer_openai_base = os.getenv("SUMMARIZER_OPENAI_API_BASE")
 summarizer_openai_key = os.getenv("SUMMARIZER_OPENAI_API_KEY")
-print("SUMMARIZER_OPENAI_API_BASE:", summarizer_openai_base)
+logger.info("SUMMARIZER_OPENAI_API_BASE: %s", summarizer_openai_base)
 summarizer_http_client = None
 if os.getenv("SUMMARIZER_OPENAI_API_USERNAME"):
-    print("Configuring custom authentication for Summarizer OpenAI API...")
+    logger.info("Configuring custom authentication for Summarizer OpenAI API...")
     summarizer_auth = BasicAuth(
         username=os.getenv("SUMMARIZER_OPENAI_API_USERNAME"), password=os.getenv("SUMMARIZER_OPENAI_API_PASSWORD")
     )
@@ -209,21 +214,21 @@ summarizer_client = OpenAI(
     api_key=summarizer_openai_key, base_url=summarizer_openai_base, http_client=summarizer_http_client
 )
 
-print("Loading tokenizer...")
+logger.info("Loading tokenizer...")
 tokenizer = load_tokenizer(model_path)
 summarizer_tokenizer = load_tokenizer(summarizer_model_path)
 
-print("Loading retriever...")
+logger.info("Loading retriever...")
 retriever = load_retriever(retriever_name, default_k=retriever_top_k, **json.loads(retriever_kwargs))
 
 reranker = None
 if reranker_name is not None:
-    print("Loading reranker...")
+    logger.info("Loading reranker...")
     reranker = load_reranker(
         reranker_name, max_length=reranker_max_tokens, batch_size=reranker_batch_size, **json.loads(reranker_kwargs)
     )
 
-print("Loading summarizer...")
+logger.info("Loading summarizer...")
 summarizer = OpenAISummarizer(
     client=summarizer_client,
     model=summarizer_model_path,
@@ -234,7 +239,7 @@ summarizer = OpenAISummarizer(
     temperature=summarizer_temperature,
     top_p=summarizer_top_p,
 )
-print("Setup completed.")
+logger.info("Setup completed.")
 
 
 def extract_final_answer(output: str) -> str:
@@ -273,39 +278,39 @@ def extract_citations(text: str, executed_search_urls: dict[str, str]) -> tuple[
 
 
 def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
-    print(f"Processing question: {question}")
+    logger.info("Processing question: %s", question)
 
-    print("Performing initial search...")
+    logger.info("Performing initial search...")
     for search_retry_count in range(max_search_retries):
         try:
             search_results = retriever(question)
-            print(f"Retrieved {len(search_results)} documents.")
+            logger.info("Retrieved %d documents.", len(search_results))
             break
         except Exception:
             if search_retry_count < max_search_retries - 1:
                 interval = 10 * 2**search_retry_count
-                print(f"Search failed. Trying after {interval} seconds...")
+                logger.info("Search failed. Trying after %d seconds...", interval)
                 time.sleep(interval)
     else:
         search_results = []
-        print("Retriever failed. Proceeding with zero documents.")
+        logger.info("Retriever failed. Proceeding with zero documents.")
 
     if reranker is not None and len(search_results) > 0:
-        print("Reranking search results...")
+        logger.info("Reranking search results...")
         reranked_results, _ = reranker(question, search_results)
-        print(f"Reranked {len(reranked_results)} documents.")
+        logger.info("Reranked %d documents.", len(reranked_results))
     else:
         reranked_results = search_results
 
     for rollout_count in range(max_rollouts):
-        print(f"Starting rollout {rollout_count + 1}...")
+        logger.info("Starting rollout %d...", rollout_count + 1)
 
-        print("Generating initial search summary...")
+        logger.info("Generating initial search summary...")
         initial_search_documents = generate_ref_id(set(), reranked_results)
         initial_search_summary = summarizer(
             previous_reasoning=None, search_query=question, documents=initial_search_documents
         )
-        print("Initial search summary generated.")
+        logger.info("Initial search summary generated.")
 
         instruction = get_qa_instruction(max_search_limit, question, initial_search_summary)
         prompt = [{"role": "user", "content": instruction}]
@@ -317,10 +322,10 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
         executed_search_urls = {ref_id: data["url"] for ref_id, data in initial_search_documents.items()}
 
         for turn in range(max_turns):
-            print(f"Starting turn {turn + 1}...")
+            logger.info("Starting turn %d...", turn + 1)
 
-            print("Generating response...")
-            print(f"Prompt: {prompt + output}")
+            logger.info("Generating response...")
+            logger.info("Prompt: %s", prompt + output)
             turn_output = (
                 run_generation_openai(
                     prompt=prompt + output,
@@ -336,8 +341,8 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                 .choices[0]
                 .text
             )
-            print("Response generated.")
-            print(f"Output: {turn_output}")
+            logger.info("Response generated.")
+            logger.info("Output: %s", turn_output)
 
             output += turn_output
 
@@ -345,29 +350,29 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
 
             if search_query and output.rstrip().endswith(END_SEARCH_QUERY):
                 if search_count < max_search_limit and search_query not in executed_search_queries:
-                    print(f"Performing search {search_count + 1} with query: {search_query}")
+                    logger.info("Performing search %d with query: %s", search_count + 1, search_query)
 
                     if search_query in continual_search_queries:
-                        print(f'Detected continual search query: "{search_query}"')
+                        logger.info('Detected continual search query: "%s"', search_query)
                     else:
                         for search_retry_count in range(max_search_retries):
                             try:
                                 search_results = retriever(search_query)
-                                print(f"Retrieved {len(search_results)} documents.")
+                                logger.info("Retrieved %d documents.", len(search_results))
                                 break
                             except Exception:
                                 if search_retry_count < max_search_retries - 1:
                                     interval = 10 * 2**search_retry_count
-                                    print(f"Search failed. Trying after {interval} seconds...")
+                                    logger.info("Search failed. Trying after %d seconds...", interval)
                                     time.sleep(interval)
                         else:
                             search_results = []
-                            print("Retriever failed. Proceeding with zero documents.")
+                            logger.info("Retriever failed. Proceeding with zero documents.")
 
                         if reranker is not None and len(search_results) > 0:
-                            print("Reranking search results...")
+                            logger.info("Reranking search results...")
                             reranked_results, _ = reranker(search_query, search_results)
-                            print(f"Reranked {len(reranked_results)} documents.")
+                            logger.info("Reranked %d documents.", len(reranked_results))
                         else:
                             reranked_results = search_results
 
@@ -396,15 +401,15 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                                 elif reasoning_steps[-1] != "...":
                                     reasoning_steps.append("...")
 
-                        print("Generating search summary...")
+                        logger.info("Generating search summary...")
                         webpage_summary = summarizer(
                             previous_reasoning="\n\n".join(reasoning_steps),
                             search_query=search_query,
                             documents=search_documents,
                             max_retry=20,
                         )
-                        print("Search summary generated.")
-                        print(f"Summarizer output: {webpage_summary}")
+                        logger.info("Search summary generated.")
+                        logger.info("Summarizer output: %s", webpage_summary)
 
                         append_text = f"\n\n{BEGIN_SEARCH_RESULT}{webpage_summary}{END_SEARCH_RESULT}\n\n"
                         output += append_text
@@ -444,12 +449,12 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
 
         final_report = extract_final_answer(output)
         if final_report != "":
-            print("Final answer found. Exiting rollouts.")
+            logger.info("Final answer found. Exiting rollouts.")
             break
         elif rollout_count < max_rollouts - 1:
-            print("No final answer found. Starting a new rollout...")
+            logger.info("No final answer found. Starting a new rollout...")
     else:
-        print("No final answer found after maximum rollouts. Returning an empty answer.")
+        logger.info("No final answer found after maximum rollouts. Returning an empty answer.")
 
     intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
     ref_id2idx, urls = extract_citations(intermediate_steps + final_report, executed_search_urls)
@@ -457,7 +462,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
         intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
         final_report = final_report.replace(ref_id, f"[{idx + 1}]")
 
-    print("Cleaning up reference IDs...")
+    logger.info("Cleaning up reference IDs...")
     intermediate_steps = re.sub(r"\#[a-zA-Z0-9_]{4,}", "", intermediate_steps)
     final_report = re.sub(r"\#[a-zA-Z0-9_]{4,}", "", final_report)
     for match in re.finditer(r"\((\s*\[\d+\]\s*,?)*\)", intermediate_steps + final_report):
@@ -466,7 +471,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
         intermediate_steps = intermediate_steps.replace(match_text, formatted_text)
         final_report = final_report.replace(match_text, formatted_text)
 
-    print(f"Final report: {final_report}")
+    logger.info("Final report: %s", final_report)
 
     yield {
         "intermediate_steps": intermediate_steps,
@@ -491,7 +496,7 @@ def evaluate(request: EvaluateRequest) -> EvaluateResponse:
                 generated_response = item["final_report"]
                 break
     except Exception as e:
-        print(f"Error during evaluation: {e}")
+        logger.info("Error during evaluation: %s", e)
 
     return EvaluateResponse(query_id=request.iid, generated_response=generated_response)
 
