@@ -3,7 +3,13 @@ import re
 
 import torch
 from transformers import AutoTokenizer
-from vllm import LLM, SamplingParams
+
+
+try:
+    from vllm import LLM, SamplingParams
+except ImportError:
+    pass
+
 
 from utils.constants import END_SEARCH_QUERY
 
@@ -30,9 +36,10 @@ def extract_between_tags(text: str, start_tag: str, end_tag: str) -> str | None:
         return matches[-1].strip()
     return None
 
+
 def run_generation(
     prompts: list[str],
-    llm: LLM,
+    llm: "LLM",
     tokenizer: AutoTokenizer,
     max_tokens: int,
     temperature: float,
@@ -65,7 +72,7 @@ def load_tokenizer(model_path: str, trust_remote_code: bool = True, padding_side
 
 def load_vllm_model(
     model_path: str, tensor_parallel_size: int = torch.cuda.device_count(), gpu_memory_utilization: float = 0.95
-) -> LLM:
+) -> "LLM":
     logger.info(f"Loading model from {model_path} (device_count: {torch.cuda.device_count()})")
     llm = LLM(
         model=model_path, tensor_parallel_size=tensor_parallel_size, gpu_memory_utilization=gpu_memory_utilization
