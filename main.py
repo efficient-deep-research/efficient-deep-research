@@ -6,6 +6,7 @@ import time
 from typing import Iterator
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from httpx import BasicAuth, Client
 from openai import OpenAI
@@ -37,6 +38,10 @@ class RunRequest(BaseModel):
 
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
+)
 
 
 def run_generation_openai(
@@ -470,6 +475,11 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
         "complete": True,
         "citations": urls,
     }
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 
 @app.post("/evaluate")
