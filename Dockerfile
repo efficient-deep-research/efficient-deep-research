@@ -60,7 +60,7 @@ ENV SUMMARIZER_OPENAI_API_PASSWORD=$SUMMARIZER_OPENAI_API_PASSWORD
 ARG RETRIEVER_API_KEY=""
 ENV RETRIEVER_API_KEY=$RETRIEVER_API_KEY
 
-EXPOSE 8000
+EXPOSE 5027
 
 # Run the FastAPI application
-CMD ["/app/.venv/bin/fastapi", "run", "main.py", "--port", "8000", "--host", "0.0.0.0"]
+CMD ["/app/.venv/bin/fastapi", "run", "main.py", "--port", "5027", "--host", "0.0.0.0"]
