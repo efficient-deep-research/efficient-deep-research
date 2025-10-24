@@ -1,10 +1,12 @@
 #!/bin/sh
 #PBS -q rt_HF
 #PBS -l select=1
-#PBS -l walltime=3:00:00
+#PBS -l walltime=5:00:00
 #PBS -P gcd50664
 #PBS -k oe
 #PBS -m abe
+
+# NOTE: SETUP .env FILE BEFORE RUNNING THIS SCRIPT
 
 # ========== ログ ==========
 LOG_FILE="$PBS_O_WORKDIR/logs/$PBS_JOBID.log"
@@ -12,59 +14,58 @@ mkdir -p "$(dirname "$LOG_FILE")"
 exec > >(tee -a "$LOG_FILE") 2>&1
 trap 'echo "Error at line $LINENO, exit status $?"' ERR
 
-echo "Merging and pushing checkpoint 1278795.pbs1/v0-20251022-145638/checkpoint-30"
-singularity exec \
-    --nv \
-    --network host \
-    --writable-tmpfs \
-    --bind $PBS_O_WORKDIR/download:/mnt/workspace \
-    "$PBS_O_WORKDIR/container/ms-swift_container.sif" \
-    swift export \
-        --adapters $PBS_O_WORKDIR/output/1278795.pbs1/v0-20251022-145638/checkpoint-30 \
-        --merge_lora True \
-        --push_to_hub true \
-        --use_hf true \
-        --exist_ok True \
-        --hub_model_id "efficient-deep-research/gap_0_5_lora_ckpt_30_merged" \
-        --hub_token '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'
 
-rm -rf $PBS_O_WORKDIR/output/1278795.pbs1/v0-20251022-145638/checkpoint-30-merged
-echo "Removed checkpoint 1278795.pbs1/v0-20251022-145638/checkpoint-30-merged"
+# ========== HF TOKEN ==========
+if [ -f "$PBS_O_WORKDIR/.env" ]; then
+    set -a
+    source "$PBS_O_WORKDIR/.env"
+    set +a
+else
+    echo ".env file not found"
+    exit 1
+fi
 
-echo "Merging and pushing checkpoint 1278795.pbs1/v0-20251022-145638/checkpoint-40"
-singularity exec \
-    --nv \
-    --network host \
-    --writable-tmpfs \
-    --bind $PBS_O_WORKDIR/download:/mnt/workspace \
-    "$PBS_O_WORKDIR/container/ms-swift_container.sif" \
-    swift export \
-        --adapters $PBS_O_WORKDIR/output/1278795.pbs1/v0-20251022-145638/checkpoint-40 \
-        --merge_lora True \
-        --push_to_hub true \
-        --use_hf true \
-        --exist_ok True \
-        --hub_model_id "efficient-deep-research/gap_0_5_lora_ckpt_40_merged" \
-        --hub_token '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'
+# FORMATTING: JOBID.pbs1/v0-YYYYMMDD-HHMMSS/checkpoint-:CKPT:BETA:GAP
+CHECKPOINTS="
+1284231[2].pbs1/v0-20251023-180125/checkpoint-:10:0.5:0.3
+1284231[2].pbs1/v0-20251023-180125/checkpoint-:40:0.5:0.3
+1283248[1].pbs1/v0-20251023-125850/checkpoint-:10:0.01:0.5
+1283248[1].pbs1/v0-20251023-125850/checkpoint-:20:0.01:0.5
+1283248[2].pbs1/v0-20251023-125849/checkpoint-:10:0.5:0.5
+1283248[2].pbs1/v0-20251023-125849/checkpoint-:20:0.5:0.5
+1283248[2].pbs1/v0-20251023-125849/checkpoint-:40:0.5:0.5
+1283248[2].pbs1/v0-20251023-125849/checkpoint-:47:0.5:0.5
+1284231[1].pbs1/v0-20251023-180133/checkpoint-:10:0.5:0.7
+1284231[1].pbs1/v0-20251023-180133/checkpoint-:20:0.5:0.7
+"
+# ON THE LIST: 
+# 1284231[2].pbs1/v0-20251023-180125/checkpoint-:50:0.5:0.3
+# 1284231[2].pbs1/v0-20251023-180125/checkpoint-:56:0.5:0.3
 
-rm -rf $PBS_O_WORKDIR/output/1278795.pbs1/v0-20251022-145638/checkpoint-40-merged
-echo "Removed checkpoint 1278795.pbs1/v0-20251022-145638/checkpoint-40-merged"
+for item in $CHECKPOINTS; do
+    JOBID=$(echo "$item" | cut -d: -f1)
+    CKPT=$(echo "$item" | cut -d: -f2)
+    BETA=$(echo "$item" | cut -d: -f3)
+    GAP=$(echo "$item" | cut -d: -f4)
 
-echo "Merging and pushing checkpoint 1280112.pbs1/v0-20251022-231318/checkpoint-47"
-singularity exec \
-    --nv \
-    --network host \
-    --writable-tmpfs \
-    --bind $PBS_O_WORKDIR/download:/mnt/workspace \
-    "$PBS_O_WORKDIR/container/ms-swift_container.sif" \
-    swift export \
-        --adapters $PBS_O_WORKDIR/output/1280112.pbs1/v0-20251022-231318/checkpoint-47 \
-        --merge_lora True \
-        --push_to_hub true \
-        --use_hf true \
-        --exist_ok True \
-        --hub_model_id "efficient-deep-research/gap_0_5_lora_ckpt_47_merged" \
-        --hub_token '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'
+    echo "Merging and pushing checkpoint ${JOBID}${CKPT}"
+    ls -la $PBS_O_WORKDIR/output/${JOBID}${CKPT}
+    echo "HF_TOKEN: $HF_TOKEN"
+    singularity exec \
+        --nv \
+        --network host \
+        --writable-tmpfs \
+        --bind $PBS_O_WORKDIR/download:/mnt/workspace \
+        "$PBS_O_WORKDIR/container/ms-swift_container.sif" \
+        swift export \
+            --adapters "$PBS_O_WORKDIR/output/${JOBID}${CKPT}" \
+            --merge_lora True \
+            --push_to_hub true \
+            --use_hf true \
+            --exist_ok True \
+            --hub_model_id "efficient-deep-research/gap_${GAP}_beta_${BETA}_lora_ckpt_${CKPT}_merged" \
+            --hub_token "$HF_TOKEN"
 
-rm -rf $PBS_O_WORKDIR/output/1280112.pbs1/v0-20251022-231318/checkpoint-47-merged
-echo "Removed checkpoint 1280112.pbs1/v0-20251022-231318/checkpoint-47-merged"
+    rm -rf "$PBS_O_WORKDIR/output/${JOBID}${CKPT}-merged"
+    echo "Removed checkpoint ${JOBID}${CKPT}-merged"
+done
