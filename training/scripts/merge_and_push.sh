@@ -27,20 +27,12 @@ fi
 
 # FORMATTING: JOBID.pbs1/v0-YYYYMMDD-HHMMSS/checkpoint-:CKPT:BETA:GAP
 CHECKPOINTS="
-1284231[2].pbs1/v0-20251023-180125/checkpoint-:10:0.5:0.3
-1284231[2].pbs1/v0-20251023-180125/checkpoint-:40:0.5:0.3
-1283248[1].pbs1/v0-20251023-125850/checkpoint-:10:0.01:0.5
-1283248[1].pbs1/v0-20251023-125850/checkpoint-:20:0.01:0.5
-1283248[2].pbs1/v0-20251023-125849/checkpoint-:10:0.5:0.5
-1283248[2].pbs1/v0-20251023-125849/checkpoint-:20:0.5:0.5
-1283248[2].pbs1/v0-20251023-125849/checkpoint-:40:0.5:0.5
-1283248[2].pbs1/v0-20251023-125849/checkpoint-:47:0.5:0.5
 1284231[1].pbs1/v0-20251023-180133/checkpoint-:10:0.5:0.7
 1284231[1].pbs1/v0-20251023-180133/checkpoint-:20:0.5:0.7
+1284231[2].pbs1/v0-20251023-180125/checkpoint-:10:0.5:0.3
+1284231[2].pbs1/v0-20251023-180125/checkpoint-:56:0.5:0.3
 "
-# ON THE LIST: 
-# 1284231[2].pbs1/v0-20251023-180125/checkpoint-:50:0.5:0.3
-# 1284231[2].pbs1/v0-20251023-180125/checkpoint-:56:0.5:0.3
+
 
 for item in $CHECKPOINTS; do
     JOBID=$(echo "$item" | cut -d: -f1)
