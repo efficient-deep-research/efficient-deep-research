@@ -17,3 +17,4 @@
 - `scripts/config.sh`にファイル等の変数を設定してください．
 - `configs/base.json`にハイパーパラメータを設定してください．
 - 学習を開始するには，`scripts/run_DPO.sh`を実行してください．
+

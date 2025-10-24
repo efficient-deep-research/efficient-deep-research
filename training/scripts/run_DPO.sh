@@ -46,12 +46,13 @@ TRAIN_ARGS+=(--attn_impl flash_attention_2)
 TRAIN_ARGS+=(--learning_rate 1e-4)
 TRAIN_ARGS+=(--gradient_accumulation_steps 16)
 TRAIN_ARGS+=(--warmup_ratio 0.05)
+TRAIN_ARGS+=(--beta 0.5)
 
-TRAIN_ARGS+=(--run_name run_score_gap_0_5_lora)
+TRAIN_ARGS+=(--run_name run_score_gap_0_5_lora_beta_0_5)
 
 
 # ========== resume from checkpoint ==========
-TRAIN_ARGS+=(--resume_from_checkpoint $PBS_O_WORKDIR/output/1278795.pbs1/v0-20251022-145638/checkpoint-40)
+# TRAIN_ARGS+=(--resume_from_checkpoint $PBS_O_WORKDIR/output/1278795.pbs1/v0-20251022-145638/checkpoint-40)
 
 # ========== 実行 ==========
 mkdir -p "$OUTPUT_DIR"
