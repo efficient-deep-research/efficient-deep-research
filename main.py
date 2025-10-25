@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from httpx import BasicAuth, Client
+from logtail import LogtailHandler
 from openai import OpenAI
 from openai.types import Completion
 from pydantic import BaseModel
@@ -24,8 +25,16 @@ from utils.prompts import get_qa_instruction
 from utils.summarizer import Summarizer
 
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+)
 logger = logging.getLogger(__name__)
+
+logtail_host = os.getenv("LOGTAIL_HOST")
+if logtail_host:
+    logtail_handler = LogtailHandler(source_token=os.getenv("LOGTAIL_TOKEN"), host=logtail_host)
+    logger.addHandler(logtail_handler)
+    logger.info("Logtail handler added (host: %s)", logtail_host)
 
 
 class EvaluateRequest(BaseModel):

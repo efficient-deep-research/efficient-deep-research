@@ -16,6 +16,7 @@ dependencies = [
     "tqdm>=4.67.1",
     "fastapi[standard]>=0.118.0",
     "openai>=2.2.0",
+    "logtail-python>=0.3.4",
 ]
 
 [tool.ruff]
