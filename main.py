@@ -302,7 +302,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                 time.sleep(interval)
     else:
         search_results = []
-        logger.info("Retriever failed. Proceeding with zero documents.")
+        logger.warning("Retriever failed. Proceeding with zero documents.")
 
     if reranker is not None and len(search_results) > 0:
         logger.info("Reranking search results...")
@@ -376,7 +376,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                                     time.sleep(interval)
                         else:
                             search_results = []
-                            logger.info("Retriever failed. Proceeding with zero documents.")
+                            logger.warning("Retriever failed. Proceeding with zero documents.")
 
                         if reranker is not None and len(search_results) > 0:
                             logger.info("Reranking search results...")
@@ -463,7 +463,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
         elif rollout_count < max_rollouts - 1:
             logger.info("No final answer found. Starting a new rollout...")
     else:
-        logger.info("No final answer found after maximum rollouts. Returning an empty answer.")
+        logger.warning("No final answer found after maximum rollouts. Returning an empty answer.")
 
     intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
     ref_id2idx, urls = extract_citations(intermediate_steps + final_report, executed_search_urls)
@@ -505,7 +505,7 @@ def evaluate(request: EvaluateRequest) -> EvaluateResponse:
                 generated_response = item["final_report"]
                 break
     except Exception as e:
-        logger.info("Error during evaluation: %s", e)
+        logger.error("Error during evaluation: %s", e)
 
     return EvaluateResponse(query_id=request.iid, generated_response=generated_response)
 
@@ -516,6 +516,7 @@ def response_streamer(question: str) -> Iterator[str]:
         for item in run_inference(question):
             yield f"data: {json.dumps(item)}\n"
     except Exception as e:
+        logger.error("Error during evaluation: %s", e)
         item["error"] = str(e)
         item["complete"] = True
         yield f"data: {json.dumps(item)}\n"
