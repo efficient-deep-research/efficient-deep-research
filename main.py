@@ -257,6 +257,12 @@ except Exception as e:
     raise e
 
 
+def make_intermediate_steps(output: str) -> str:
+    output = re.sub(r"</?think>", "", output)
+    output = re.sub(r"\n\n+", "\n", output)
+    return "|||---|||".join(output.split("\n"))
+
+
 def extract_final_answer(output: str) -> str:
     marker = "**Final Information**"
     if marker in output:
@@ -435,7 +441,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                     limit_message = f"\n{BEGIN_SEARCH_RESULT}\nYou have searched this query. Please refer to previous results.\n{END_SEARCH_RESULT}\n"
                     output += limit_message
 
-                intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
+                intermediate_steps = make_intermediate_steps(output)
                 ref_id2idx, urls = extract_citations(intermediate_steps, executed_search_urls)
                 for ref_id, idx in ref_id2idx.items():
                     intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
@@ -448,7 +454,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                     "citations": urls,
                 }
             else:
-                intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
+                intermediate_steps = make_intermediate_steps(output)
                 ref_id2idx, urls = extract_citations(intermediate_steps, executed_search_urls)
                 for ref_id, idx in ref_id2idx.items():
                     intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
@@ -471,7 +477,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
     else:
         logger.warning("No final answer found after maximum rollouts. Returning an empty answer.")
 
-    intermediate_steps = "|||---|||".join(output.replace("\n\n", "\n").split("\n"))
+    intermediate_steps = make_intermediate_steps(output)
     ref_id2idx, urls = extract_citations(intermediate_steps + final_report, executed_search_urls)
     for ref_id, idx in ref_id2idx.items():
         intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
