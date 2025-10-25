@@ -11,9 +11,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     --mount=type=bind,source=.python-version,target=.python-version \
-    uv sync --locked --no-install-project
-RUN uv pip install torch==2.8.0
-RUN uv pip install flash-attn --no-build-isolation
+    uv sync --locked --no-install-project && \
+    uv pip install torch==2.8.0 && \
+    uv pip install flash-attn --no-build-isolation
 
 # Pre-download model tokenizer and weights
 ARG MODEL_PATH="Qwen/Qwen3-4B-Thinking-2507"
@@ -25,10 +25,12 @@ ENV SUMMARIZER_MODEL_PATH=$SUMMARIZER_MODEL_PATH
 ARG RERANKER_MODEL_PATH="Qwen/Qwen3-Reranker-0.6B"
 ENV RERANKER_MODEL_PATH=$RERANKER_MODEL_PATH
 
-RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${MODEL_PATH}')"
-RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${SUMMARIZER_MODEL_PATH}')"
-RUN uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${RERANKER_MODEL_PATH}')"
-RUN uv run python -c "from transformers import AutoModelForCausalLM; AutoModelForCausalLM.from_pretrained('${RERANKER_MODEL_PATH}')"
+RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
+    uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${MODEL_PATH}')" && \
+    uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${SUMMARIZER_MODEL_PATH}')" && \
+    uv run python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('${RERANKER_MODEL_PATH}')" && \
+    uv run python -c "from transformers import AutoModelForCausalLM; AutoModelForCausalLM.from_pretrained('${RERANKER_MODEL_PATH}')"
+ENV TRANSFORMERS_OFFLINE=1
 
 # Copy the project into the image
 COPY . /app
@@ -59,6 +61,11 @@ ENV SUMMARIZER_OPENAI_API_PASSWORD=$SUMMARIZER_OPENAI_API_PASSWORD
 
 ARG RETRIEVER_API_KEY=""
 ENV RETRIEVER_API_KEY=$RETRIEVER_API_KEY
+
+ARG LOGTAIL_HOST=""
+ENV LOGTAIL_HOST=$LOGTAIL_HOST
+ARG LOGTAIL_TOKEN=""
+ENV LOGTAIL_TOKEN=$LOGTAIL_TOKEN
 
 EXPOSE 5027
 
