@@ -48,7 +48,7 @@ class EvaluateResponse(BaseModel):
 
 
 class RunRequest(BaseModel):
-    query: str
+    question: str
 
 
 app = FastAPI()
@@ -530,4 +530,4 @@ def response_streamer(question: str) -> Iterator[str]:
 
 @app.post("/run")
 def run(request: RunRequest) -> StreamingResponse:
-    return StreamingResponse(response_streamer(request.query), media_type="text/event-stream")
+    return StreamingResponse(response_streamer(request.question), media_type="text/event-stream")
