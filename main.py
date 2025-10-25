@@ -159,96 +159,102 @@ class OpenAISummarizer(Summarizer):
         return result
 
 
-model_path = os.getenv("MODEL_PATH")
-summarizer_model_path = os.getenv("SUMMARIZER_MODEL_PATH")
-reranker_model_path = os.getenv("RERANKER_MODEL_PATH")
-logger.info("MODEL_PATH: %s", model_path)
-logger.info("SUMMARIZER_MODEL_PATH: %s", summarizer_model_path)
-logger.info("RERANKER_MODEL_PATH: %s", reranker_model_path)
+try:
+    model_path = os.getenv("MODEL_PATH")
+    summarizer_model_path = os.getenv("SUMMARIZER_MODEL_PATH")
+    reranker_model_path = os.getenv("RERANKER_MODEL_PATH")
+    logger.info("MODEL_PATH: %s", model_path)
+    logger.info("SUMMARIZER_MODEL_PATH: %s", summarizer_model_path)
+    logger.info("RERANKER_MODEL_PATH: %s", reranker_model_path)
 
-max_search_limit = 5
-max_turns = 15
-max_rollouts = 3
-max_tokens_per_webpage = 4096
-max_tokens = 20480
-temperature = 0.6
-top_p = 0.95
-top_k_sampling = 20
+    max_search_limit = 5
+    max_turns = 15
+    max_rollouts = 3
+    max_tokens_per_webpage = 4096
+    max_tokens = 20480
+    temperature = 0.6
+    top_p = 0.95
+    top_k_sampling = 20
 
-retriever_name = "clueweb22-a"
-retriever_top_k = 300
-retriever_kwargs = "{}"
-max_search_retries = 5
+    retriever_name = "clueweb22-a"
+    retriever_top_k = 300
+    retriever_kwargs = "{}"
+    max_search_retries = 5
 
-reranker_name = "qwen3"
-reranker_max_tokens = 4096
-reranker_batch_size = 1
-reranker_kwargs = "{}"
+    reranker_name = "qwen3"
+    reranker_max_tokens = 4096
+    reranker_batch_size = 1
+    reranker_kwargs = "{}"
 
-summarizer_top_k = 10
-summarizer_max_tokens = 8192
-summarizer_temperature = 0.6
-summarizer_top_p = 0.95
+    summarizer_top_k = 10
+    summarizer_max_tokens = 8192
+    summarizer_temperature = 0.6
+    summarizer_top_p = 0.95
 
-continual_search_queries = set(
-    ["...", "query", "Enter your query here", "and", "[query]", "query here", "[Your search query]"]
-)
-
-
-logger.info("Setting up OpenAI API...")
-openai_api_key = os.getenv("OPENAI_API_KEY")
-openai_api_base = os.getenv("OPENAI_API_BASE")
-logger.info("OPENAI_API_BASE: %s", openai_api_base)
-http_client = None
-if os.getenv("OPENAI_API_USERNAME"):
-    logger.info("Configuring custom authentication for OpenAI API...")
-    auth = BasicAuth(username=os.getenv("OPENAI_API_USERNAME"), password=os.getenv("OPENAI_API_PASSWORD"))
-    http_client = Client(auth=auth)
-
-client = OpenAI(api_key=openai_api_key, base_url=openai_api_base, http_client=http_client)
-
-logger.info("Setting up OpenAI API for summarizer...")
-summarizer_openai_base = os.getenv("SUMMARIZER_OPENAI_API_BASE")
-summarizer_openai_key = os.getenv("SUMMARIZER_OPENAI_API_KEY")
-logger.info("SUMMARIZER_OPENAI_API_BASE: %s", summarizer_openai_base)
-summarizer_http_client = None
-if os.getenv("SUMMARIZER_OPENAI_API_USERNAME"):
-    logger.info("Configuring custom authentication for Summarizer OpenAI API...")
-    summarizer_auth = BasicAuth(
-        username=os.getenv("SUMMARIZER_OPENAI_API_USERNAME"), password=os.getenv("SUMMARIZER_OPENAI_API_PASSWORD")
-    )
-    summarizer_http_client = Client(auth=summarizer_auth)
-
-summarizer_client = OpenAI(
-    api_key=summarizer_openai_key, base_url=summarizer_openai_base, http_client=summarizer_http_client
-)
-
-logger.info("Loading tokenizer...")
-tokenizer = load_tokenizer(model_path)
-summarizer_tokenizer = load_tokenizer(summarizer_model_path)
-
-logger.info("Loading retriever...")
-retriever = load_retriever(retriever_name, default_k=retriever_top_k, **json.loads(retriever_kwargs))
-
-reranker = None
-if reranker_name is not None:
-    logger.info("Loading reranker...")
-    reranker = load_reranker(
-        reranker_name, max_length=reranker_max_tokens, batch_size=reranker_batch_size, **json.loads(reranker_kwargs)
+    continual_search_queries = set(
+        ["...", "query", "Enter your query here", "and", "[query]", "query here", "[Your search query]"]
     )
 
-logger.info("Loading summarizer...")
-summarizer = OpenAISummarizer(
-    client=summarizer_client,
-    model=summarizer_model_path,
-    tokenizer=summarizer_tokenizer,
-    top_k=summarizer_top_k,
-    max_tokens_per_webpage=max_tokens_per_webpage,
-    max_tokens=summarizer_max_tokens,
-    temperature=summarizer_temperature,
-    top_p=summarizer_top_p,
-)
-logger.info("Setup completed.")
+    logger.info("Setting up OpenAI API...")
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    openai_api_base = os.getenv("OPENAI_API_BASE")
+    logger.info("OPENAI_API_BASE: %s", openai_api_base)
+    http_client = None
+    if os.getenv("OPENAI_API_USERNAME"):
+        logger.info("Configuring custom authentication for OpenAI API...")
+        auth = BasicAuth(username=os.getenv("OPENAI_API_USERNAME"), password=os.getenv("OPENAI_API_PASSWORD"))
+        http_client = Client(auth=auth)
+
+    client = OpenAI(api_key=openai_api_key, base_url=openai_api_base, http_client=http_client)
+
+    logger.info("Setting up OpenAI API for summarizer...")
+    summarizer_openai_base = os.getenv("SUMMARIZER_OPENAI_API_BASE")
+    summarizer_openai_key = os.getenv("SUMMARIZER_OPENAI_API_KEY")
+    logger.info("SUMMARIZER_OPENAI_API_BASE: %s", summarizer_openai_base)
+    summarizer_http_client = None
+    if os.getenv("SUMMARIZER_OPENAI_API_USERNAME"):
+        logger.info("Configuring custom authentication for Summarizer OpenAI API...")
+        summarizer_auth = BasicAuth(
+            username=os.getenv("SUMMARIZER_OPENAI_API_USERNAME"), password=os.getenv("SUMMARIZER_OPENAI_API_PASSWORD")
+        )
+        summarizer_http_client = Client(auth=summarizer_auth)
+
+    summarizer_client = OpenAI(
+        api_key=summarizer_openai_key, base_url=summarizer_openai_base, http_client=summarizer_http_client
+    )
+
+    logger.info("Loading tokenizer...")
+    tokenizer = load_tokenizer(model_path)
+    summarizer_tokenizer = load_tokenizer(summarizer_model_path)
+
+    logger.info("Loading retriever...")
+    retriever = load_retriever(retriever_name, default_k=retriever_top_k, **json.loads(retriever_kwargs))
+
+    reranker = None
+    if reranker_name is not None:
+        logger.info("Loading reranker...")
+        reranker = load_reranker(
+            reranker_name,
+            max_length=reranker_max_tokens,
+            batch_size=reranker_batch_size,
+            **json.loads(reranker_kwargs),
+        )
+
+    logger.info("Loading summarizer...")
+    summarizer = OpenAISummarizer(
+        client=summarizer_client,
+        model=summarizer_model_path,
+        tokenizer=summarizer_tokenizer,
+        top_k=summarizer_top_k,
+        max_tokens_per_webpage=max_tokens_per_webpage,
+        max_tokens=summarizer_max_tokens,
+        temperature=summarizer_temperature,
+        top_p=summarizer_top_p,
+    )
+    logger.info("Setup completed.")
+except Exception as e:
+    logger.error("Error during setup: %s", e)
+    raise e
 
 
 def extract_final_answer(output: str) -> str:
