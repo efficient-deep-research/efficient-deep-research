@@ -270,6 +270,12 @@ except Exception as e:
     raise e
 
 
+def clean_llm_response(text: str) -> str:
+    text = re.sub(r"</?think>", "", text)
+    text = re.sub(r"\n\n+", "\n", text)
+    return text.strip()
+
+
 def make_stream_response(
     intermediate_steps: str,
     final_report: str | None = None,
@@ -278,8 +284,8 @@ def make_stream_response(
     citation_urls: list[str] | None = None,
 ) -> dict[str, str | bool | None]:
     response = {
-        "intermediate_steps": intermediate_steps,
-        "final_report": final_report,
+        "intermediate_steps": clean_llm_response(intermediate_steps),
+        "final_report": clean_llm_response(final_report) if final_report is not None else None,
         "is_intermediate": is_intermediate,
         "complete": complete,
     }
@@ -329,7 +335,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
     intermediate_steps = ""
 
     logger.info("Processing question: %s", question)
-    intermediate_steps += f"Search query: {question}"
+    intermediate_steps += "**Search query**: " + question
     yield make_stream_response(intermediate_steps)
 
     logger.info("Performing initial search...")
@@ -349,7 +355,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
 
     intermediate_steps += (
         SEP_INTERMEDIATE_STEPS
-        + f"Retreived documents (top 10 excerpts): {[doc.text[:100] + '...' for doc in search_results[:10]]}"
+        + f"**Retreived documents** (top 10 excerpts): {[doc.text[:100] + '...' for doc in search_results[:10]]}"
     )
     yield make_stream_response(intermediate_steps)
 
@@ -362,7 +368,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
 
     intermediate_steps += (
         SEP_INTERMEDIATE_STEPS
-        + f"Reranked documents (top 10 excerpts): {[doc.text[:100] + '...' for doc in reranked_results[:10]]}"
+        + f"**Reranked documents** (top 10 excerpts): {[doc.text[:100] + '...' for doc in reranked_results[:10]]}"
     )
     yield make_stream_response(intermediate_steps)
 
@@ -377,13 +383,13 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
             previous_reasoning=None, search_query=question, documents=initial_search_documents
         ):
             yield make_stream_response(
-                intermediate_steps + SEP_INTERMEDIATE_STEPS + "Summarizer response: " + summarizer_response
+                intermediate_steps + SEP_INTERMEDIATE_STEPS + "**Summarizer response**: " + summarizer_response
             )
 
         logger.info("Initial search summary generated.")
         logger.info("Summarizer output: %s", initial_search_summary)
-        intermediate_steps += SEP_INTERMEDIATE_STEPS + "Summarizer response: " + summarizer_response
-        intermediate_steps += SEP_INTERMEDIATE_STEPS + "Summarization: " + initial_search_summary
+        intermediate_steps += SEP_INTERMEDIATE_STEPS + "**Summarizer response**: " + summarizer_response
+        intermediate_steps += SEP_INTERMEDIATE_STEPS + "**Summarization**: " + initial_search_summary
         yield make_stream_response(intermediate_steps)
 
         ref_id2idx, urls = extract_citations(intermediate_steps, executed_search_urls)
@@ -407,7 +413,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
             logger.info("Generating response...")
             logger.info("Prompt: %s", prompt + output)
 
-            intermediate_steps += SEP_INTERMEDIATE_STEPS + "LLM response: "
+            intermediate_steps += SEP_INTERMEDIATE_STEPS + "**LLM response**: "
             yield make_stream_response(intermediate_steps, citation_urls=urls)
 
             turn_output = ""
@@ -457,7 +463,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
 
                         intermediate_steps += (
                             SEP_INTERMEDIATE_STEPS
-                            + f"Retreived documents (top 10 excerpts): {[doc.text[:100] + '...' for doc in search_results[:10]]}"
+                            + f"**Retreived documents** (top 10 excerpts): {[doc.text[:100] + '...' for doc in search_results[:10]]}"
                         )
                         yield make_stream_response(intermediate_steps, citation_urls=urls)
 
@@ -470,7 +476,7 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
 
                         intermediate_steps += (
                             SEP_INTERMEDIATE_STEPS
-                            + f"Reranked documents (top 10 excerpts): {[doc.text[:100] + '...' for doc in reranked_results[:10]]}"
+                            + f"**Reranked documents** (top 10 excerpts): {[doc.text[:100] + '...' for doc in reranked_results[:10]]}"
                         )
                         yield make_stream_response(intermediate_steps, citation_urls=urls)
 
@@ -510,15 +516,17 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                             yield make_stream_response(
                                 intermediate_steps
                                 + SEP_INTERMEDIATE_STEPS
-                                + "Summarizer response: "
+                                + "**Summarizer response**: "
                                 + webpage_summary,
                                 citation_urls=urls,
                             )
 
                         logger.info("Search summary generated.")
                         logger.info("Summarizer output: %s", webpage_summary)
-                        intermediate_steps += SEP_INTERMEDIATE_STEPS + "Summarizer response: " + summarizer_response
-                        intermediate_steps += SEP_INTERMEDIATE_STEPS + "Summarization: " + webpage_summary
+                        intermediate_steps += (
+                            SEP_INTERMEDIATE_STEPS + "**Summarizer response**: " + summarizer_response
+                        )
+                        intermediate_steps += SEP_INTERMEDIATE_STEPS + "**Summarization**: " + webpage_summary
                         yield make_stream_response(intermediate_steps, citation_urls=urls)
 
                         append_text = f"\n\n{BEGIN_SEARCH_RESULT}{webpage_summary}{END_SEARCH_RESULT}\n\n"
