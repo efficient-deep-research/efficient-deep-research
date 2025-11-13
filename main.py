@@ -25,6 +25,9 @@ from utils.prompts import get_qa_instruction
 from utils.summarizer import Summarizer
 
 
+SEP_INTERMEDIATE_STEPS = "|||---|||"
+
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
@@ -257,10 +260,30 @@ except Exception as e:
     raise e
 
 
-def make_intermediate_steps(output: str) -> str:
-    output = re.sub(r"</?think>", "", output)
-    output = re.sub(r"\n\n+", "\n", output)
-    return "|||---|||".join(output.split("\n"))
+def clean_llm_response(text: str) -> str:
+    text = re.sub(r"</?think>", "", text)
+    text = re.sub(r"\n\n+", "\n", text)
+    return text.strip()
+
+
+def make_stream_response(
+    intermediate_steps: str,
+    final_report: str | None = None,
+    is_intermediate: bool = True,
+    complete: bool = False,
+    citation_urls: list[str] | None = None,
+) -> dict[str, str | bool | None]:
+    response = {
+        "intermediate_steps": intermediate_steps,
+        "final_report": final_report,
+        "is_intermediate": is_intermediate,
+        "complete": complete,
+    }
+
+    if citation_urls is not None:
+        response["citations"] = citation_urls
+
+    return response
 
 
 def extract_final_answer(output: str) -> str:
@@ -299,7 +322,11 @@ def extract_citations(text: str, executed_search_urls: dict[str, str]) -> tuple[
 
 
 def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
+    intermediate_steps = ""
+
     logger.info("Processing question: %s", question)
+    intermediate_steps += f"Search query: {question}"
+    yield make_stream_response(intermediate_steps)
 
     logger.info("Performing initial search...")
     for search_retry_count in range(max_search_retries):
@@ -316,12 +343,24 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
         search_results = []
         logger.warning("Retriever failed. Proceeding with zero documents.")
 
+    intermediate_steps += (
+        SEP_INTERMEDIATE_STEPS
+        + f"Retreived documents (top 10 excerpts): {[doc.text[:100] + '...' for doc in search_results[:10]]}"
+    )
+    yield make_stream_response(intermediate_steps)
+
     if reranker is not None and len(search_results) > 0:
         logger.info("Reranking search results...")
         reranked_results, _ = reranker(question, search_results)
         logger.info("Reranked %d documents.", len(reranked_results))
     else:
         reranked_results = search_results
+
+    intermediate_steps += (
+        SEP_INTERMEDIATE_STEPS
+        + f"Reranked documents (top 10 excerpts): {[doc.text[:100] + '...' for doc in reranked_results[:10]]}"
+    )
+    yield make_stream_response(intermediate_steps)
 
     for rollout_count in range(max_rollouts):
         logger.info("Starting rollout %d...", rollout_count + 1)
@@ -332,6 +371,9 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
             previous_reasoning=None, search_query=question, documents=initial_search_documents
         )
         logger.info("Initial search summary generated.")
+
+        intermediate_steps += SEP_INTERMEDIATE_STEPS + f"Summarized documents: {initial_search_summary}"
+        yield make_stream_response(intermediate_steps)
 
         instruction = get_qa_instruction(max_search_limit, question, initial_search_summary)
         prompt = [{"role": "user", "content": instruction}]
@@ -365,6 +407,9 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
             logger.info("Response generated.")
             logger.info("Output: %s", turn_output)
 
+            intermediate_steps += SEP_INTERMEDIATE_STEPS + f"LLM response: {clean_llm_response(turn_output)}"
+            yield make_stream_response(intermediate_steps)
+
             output += turn_output
 
             search_query = extract_between_tags(turn_output, BEGIN_SEARCH_QUERY, END_SEARCH_QUERY)
@@ -390,12 +435,24 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                             search_results = []
                             logger.warning("Retriever failed. Proceeding with zero documents.")
 
+                        intermediate_steps += (
+                            SEP_INTERMEDIATE_STEPS
+                            + f"Retreived documents (top 10 excerpts): {[doc.text[:100] + '...' for doc in search_results[:10]]}"
+                        )
+                        yield make_stream_response(intermediate_steps)
+
                         if reranker is not None and len(search_results) > 0:
                             logger.info("Reranking search results...")
                             reranked_results, _ = reranker(search_query, search_results)
                             logger.info("Reranked %d documents.", len(reranked_results))
                         else:
                             reranked_results = search_results
+
+                        intermediate_steps += (
+                            SEP_INTERMEDIATE_STEPS
+                            + f"Reranked documents (top 10 excerpts): {[doc.text[:100] + '...' for doc in reranked_results[:10]]}"
+                        )
+                        yield make_stream_response(intermediate_steps)
 
                         existing_ids = executed_search_urls.keys()
                         search_documents = generate_ref_id(existing_ids, reranked_results)
@@ -432,6 +489,9 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                         logger.info("Search summary generated.")
                         logger.info("Summarizer output: %s", webpage_summary)
 
+                        intermediate_steps += SEP_INTERMEDIATE_STEPS + f"Summarized documents: {webpage_summary}"
+                        yield make_stream_response(intermediate_steps)
+
                         append_text = f"\n\n{BEGIN_SEARCH_RESULT}{webpage_summary}{END_SEARCH_RESULT}\n\n"
                         output += append_text
                 elif search_count >= max_search_limit:
@@ -441,31 +501,17 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
                     limit_message = f"\n{BEGIN_SEARCH_RESULT}\nYou have searched this query. Please refer to previous results.\n{END_SEARCH_RESULT}\n"
                     output += limit_message
 
-                intermediate_steps = make_intermediate_steps(output)
                 ref_id2idx, urls = extract_citations(intermediate_steps, executed_search_urls)
                 for ref_id, idx in ref_id2idx.items():
                     intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
 
-                yield {
-                    "intermediate_steps": intermediate_steps,
-                    "final_report": None,
-                    "is_intermediate": True,
-                    "complete": False,
-                    "citations": urls,
-                }
+                yield make_stream_response(intermediate_steps, citation_urls=urls)
             else:
-                intermediate_steps = make_intermediate_steps(output)
                 ref_id2idx, urls = extract_citations(intermediate_steps, executed_search_urls)
                 for ref_id, idx in ref_id2idx.items():
                     intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
 
-                yield {
-                    "intermediate_steps": intermediate_steps,
-                    "final_report": None,
-                    "is_intermediate": False,
-                    "complete": False,
-                    "citations": urls,
-                }
+                yield make_stream_response(intermediate_steps, is_intermediate=False, citation_urls=urls)
                 break
 
         final_report = extract_final_answer(output)
@@ -477,7 +523,6 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
     else:
         logger.warning("No final answer found after maximum rollouts. Returning an empty answer.")
 
-    intermediate_steps = make_intermediate_steps(output)
     ref_id2idx, urls = extract_citations(intermediate_steps + final_report, executed_search_urls)
     for ref_id, idx in ref_id2idx.items():
         intermediate_steps = intermediate_steps.replace(ref_id, f"[{idx + 1}]")
@@ -493,14 +538,9 @@ def run_inference(question: str) -> Iterator[dict[str, str | bool | None]]:
         final_report = final_report.replace(match_text, formatted_text)
 
     logger.info("Final report: %s", final_report)
-
-    yield {
-        "intermediate_steps": intermediate_steps,
-        "final_report": final_report,
-        "is_intermediate": False,
-        "complete": True,
-        "citations": urls,
-    }
+    yield make_stream_response(
+        intermediate_steps, final_report=final_report, is_intermediate=False, complete=True, citation_urls=urls
+    )
 
 
 @app.get("/health")
