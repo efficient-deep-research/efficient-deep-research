@@ -15,17 +15,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
-def extract_final_information(output: str) -> str:
-    pattern_info = "**Final Information**"
-    if pattern_info in output:
-        extracted_text = output.split(pattern_info)[-1].replace("\n", "").strip("```").strip()
-    else:
-        extracted_text = output
-
-    return extracted_text
-
-
 def create_kpr_prompt(key_point, answer):
     return f"""You are given a **single key point** and a **report**.
 
@@ -105,6 +94,11 @@ async def evaluate_with_openai_judge(
                     tqdm.write(f"Rate limit hit, waiting {wait_time:.2f} seconds...")
                     await asyncio.sleep(wait_time)
                     continue
+                elif "json_invalid" in str(e) or "parsing" in str(e):
+                    wait_time = min(10, (2**attempt) + random.uniform(0, 1))
+                    tqdm.write(f"JSON parsing error, waiting {wait_time:.2f} seconds...")
+                    await asyncio.sleep(wait_time)
+                    continue
                 else:
                     tqdm.write(f"Error during OpenAI API call: {e}\nError caused by prompt:\n{prompt}")
                     return {"success": False, "error": str(e)}
@@ -169,6 +163,7 @@ async def evaluate_kpr_async(
     client: AsyncAzureOpenAI,
     model: str,
     semaphore: asyncio.Semaphore,
+    max_key_points: int,
     output_path: str = None,
 ) -> List[Dict]:
     intermediate_file = (
@@ -182,7 +177,7 @@ async def evaluate_kpr_async(
     async with aiofiles.open(intermediate_file, "a", encoding="utf-8") as file:
         file_lock = asyncio.Lock()
         for kp_group_id, (key_points, answer) in enumerate(zip(key_points_collection, answers)):
-            for key_point in key_points:
+            for key_point in key_points[:max_key_points]:
                 if (kp_group_id, key_point["point_number"]) not in completed_tasks:
                     tasks.append(
                         evaluate_single_key_point(
@@ -239,7 +234,7 @@ async def evaluate_kpr_async(
     if error_count > 0:
         print(f"Warning: {error_count} key point evaluations failed.")
 
-    os.remove(intermediate_file)
+    # os.remove(intermediate_file)
 
     return kpr_results
 
@@ -330,13 +325,18 @@ async def evaluate_criteria_async(
     if error_count > 0:
         print(f"Warning: {error_count} criterion evaluations failed.")
 
-    os.remove(intermediate_file)
+    # os.remove(intermediate_file)
 
     return eval_criteria_results
 
 
 async def evaluate_response_quality_async(
-    input_data: Dict, eval_criteria: List[str] = [], eval_kpr: bool = False, max_concurrent_requests: int = 100, output_path: str = None
+    input_data: Dict,
+    eval_criteria: List[str] = [], 
+    eval_kpr: bool = False, 
+    max_key_points: int = 20, 
+    max_concurrent_requests: int = 100, 
+    output_path: str = None
 ):
     azure_deployment = os.getenv("AZURE_DEPLOYMENT")
     azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -354,7 +354,7 @@ async def evaluate_response_quality_async(
     for query, rollouts in input_data.items():
         for rollout_idx, rollout in enumerate(rollouts):
             flat_questions.append(query)
-            flat_final_answers.append(extract_final_information(rollout["output"]))
+            flat_final_answers.append(rollout["final_answer"])
             reconstruction_map.append((query, rollout_idx))
             if eval_kpr:
                 flat_key_points_collection.append(rollout["item"]["key_points"])
@@ -370,9 +370,12 @@ async def evaluate_response_quality_async(
     )
     if eval_kpr:
         kpr_task = evaluate_kpr_async(
+            key_points_collection=flat_key_points_collection,
+            answers=flat_final_answers,
             client=client,
             model=azure_deployment,
             semaphore=semaphore,
+            max_key_points=max_key_points,
             output_path=output_path,
         )
         eval_kpr_results, eval_criteria_results = await asyncio.gather(kpr_task, criteria_task)

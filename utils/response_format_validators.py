@@ -53,7 +53,7 @@ def detect_variant_markers(input_string):
     return (len(variant_markers) > 0) or has_think_issue
 
 
-def is_valid_history(history):
+def validate_history(history):
     """
     Detect whether the history list conforms to valid cases.
 
