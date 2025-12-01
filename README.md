@@ -66,3 +66,5 @@ python format_preference_data.py \
 ## Inference
 
 ## License
+
+Apache License 2.0
