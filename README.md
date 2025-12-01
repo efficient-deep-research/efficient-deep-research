@@ -26,7 +26,7 @@ python generate_rollouts.py \
     --auto_resume
 ```
 
-### Step 2: Evaluate Generated Answers
+### Evaluate Generated Answers
 
 Evaluate the generated answers using an LLM-as-a-judge approach. This assigns preference scores based on clarity, insightfulness, and factuality metrics.
 
