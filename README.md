@@ -65,6 +65,38 @@ python format_preference_data.py \
 
 ## Inference
 
+You can run an inference server with the trained model, using a Docker container.
+
+We assume that the LLMs for generating reasoning steps and summarizing retrieved web page contents are running on remote vLLM servers.
+Please set the URLs of those vLLM endpoints to the `OPENAI_API_BASE` and `SUMMARIZER_OPENAI_API_BASE` build arguments.
+
+```bash
+docker build --platform linux/amd64 -t efficient-deep-research \
+--build-arg MODEL_PATH=efficient-deep-research/gap_0.3_beta_0.5_lora_ckpt_56_merged_FP8 \
+--build-arg SUMMARIZER_MODEL_PATH=Qwen/Qwen3-Next-80B-A3B-Thinking-FP8 \
+--build-arg OPENAI_API_BASE=http://xxx.xxx.xxx.xxx:8000/v1 \
+--build-arg SUMMARIZER_OPENAI_API_BASE=http://xxx.xxx.xxx.xxx:8000/v1 \
+--build-arg RETRIEVER_API_KEY=<CLUE_WEB_API_KEY>
+.
+```
+
+Then run a container:
+
+```bash
+docker run --gpus 1 --rm -p 5027:5027 efficient-deep-research
+```
+
+Send a request to the API running in the container:
+
+```bash
+# Get a static (non-streaming) response
+curl http://127.0.0.1:5027/evaluate -H "Content-Type: application/json" -d '{"query": "Explain gravity", "iid": "123"}'
+
+# Get a streaming response
+curl http://127.0.0.1:5027/run -H "Content-Type: application/json" -d '{"question": "Explain why the sky is blue"}'
+```
+
+
 ## License
 
 Apache License 2.0
