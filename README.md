@@ -5,15 +5,15 @@ The system is capable of generating report-style, long-form answers to arbitrary
 
 ### Generate Answer Rollouts
 
-Generate multiple answer candidates for each question using the base model (`Qwen/Qwen3-Next-80B-A3B-Thinking-FP8`). This step creates 20 different responses per question through sampling.
+Generate multiple answer candidates for each question using the base model (`Qwen/Qwen3-Next-80B-A3B-Thinking-FP8`). This step creates 20 different responses per question.
 
 ```bash
 export RETRIEVER_API_KEY=<CLUE_WEB_API_KEY>
 export VLLM_FLASH_ATTN_VERSION=2
 
 python generate_rollouts.py \
-    --data_path  \
-    --output_dir_base  \
+    --data_path <DATA_PATH> \
+    --output_dir_base  <YOUR_OUTPUT_PATH> \
     --model_path Qwen/Qwen3-Next-80B-A3B-Thinking-FP8 \
     --retriever clueweb22-a \
     --reranker qwen3 \
@@ -26,7 +26,7 @@ python generate_rollouts.py \
     --auto_resume
 ```
 
-### Evaluate Generated Answers
+### Step 2: Evaluate Generated Answers
 
 Evaluate the generated answers using an LLM-as-a-judge approach. This assigns preference scores based on clarity, insightfulness, and factuality metrics.
 
@@ -38,20 +38,20 @@ AZURE_OPENAI_API_KEY=""
 AZURE_OPENAI_API_VERSION=""
 ```
 
-Then run the evaluation:
+Then run the evaluation. Note that `--root_path` should be the same as `--output_dir_base` you specified in the previous command. By setting `--filtering_criteria finished valid_citation_format`, unfinished rollouts and rollouts containing citation format errors will be filtered out:
 ```bash
 python evaluate_rollouts.py \
-    --root_path  \
+    --root_path <ROOT_PATH> \
     --eval_kpr \
     --max_key_points 10 \
     --eval_clarity_and_insightfulness \
-    --output_path  \
-    --filtering_criteria finished
+    --output_path <YOUR_OUTPUT_PATH> \
+    --filtering_criteria finished valid_citation_format
 ```
 
 ### Construct Preference Pairs
 
-Construct preference pairs by selecting the best and worst answers for each question based on their preference scores. The script filters out malformed responses and ensures a minimum score gap (`--min_score_gap`) between chosen and rejected answers.
+Construct preference pairs by selecting the best and worst answers for each question based on their preference scores. The script ensures a minimum score gap (`--min_score_gap`) between chosen and rejected answers.
 ```bash
 python format_preference_data.py \
     --evaluated_rollouts_file  \
