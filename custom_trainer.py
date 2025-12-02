@@ -36,7 +36,6 @@ class SearchResultMaskDPOTrainer(DPOTrainer):
         loss_mask = labels != label_pad_token_id
 
         # ================== Custom part =================
-        # print("test|", repr(self.tokenizer.decode([26432, 408, 10716, 5287, 91, 1339])), "|end")
         try:
             loss_mask = loss_mask | self._mask_between_tags(labels)
         except Exception as e:
