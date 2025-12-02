@@ -63,6 +63,32 @@ python format_preference_data.py \
 
 ## Training
 
+You can run DPO training by executing `python train_DPO.py` with the appropriate arguments.
+This implementation is based on [SWIFT](https://github.com/modelscope/swift).
+
+We employ a custom trainer that subclasses SWIFT's `DPOTrainer`. This trainer specifically masks search results within the text to exclude them from the loss calculation.
+
+Below is an example of how to run the training command, using arguments similar to those in SWIFT:
+
+```bash
+python train_DPO.py \
+    --rlhf_type dpo \
+    --model_id_or_path <YOUR_MODEL_PATH> \
+    --dataset <YOUR_DATASET_PATH> \
+    --output_dir <OUTPUT_DIR> \
+    --sft_type lora \
+    --lora_target_modules all-linear \
+    --num_train_epochs 1 \
+    --max_length 28160 \
+    --batch_size 1 \
+    --gradient_accumulation_steps 16 \
+    --learning_rate 1e-4 \
+    --warmup_ratio 0.05 \
+    --beta 0.5 \
+    --save_total_limit 2 \
+    --logging_steps 10 \
+```
+
 ## Inference
 
 You can run an inference server with the trained model, using a Docker container.
