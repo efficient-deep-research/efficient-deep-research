@@ -126,8 +126,8 @@ class SearchResultMaskDPOTrainer(DPOTrainer):
             assert len(start_positions) == len(end_positions), "Mismatched number of begin and end tags"
             for start, end in zip(start_positions, end_positions):
                 assert start < end, "Begin tag must come before end tag"
-                end_tag_length = int(end_lengths[batch_index, end].item())  # この B の長さ
-                end = min(end + end_tag_length - 1, seq_len - 1)  # B の末尾（含む）
+                end_tag_length = int(end_lengths[batch_index, end].item())  # length of B
+                end = min(end + end_tag_length - 1, seq_len - 1)  # include the last
                 mask[batch_index, start : end + 1] = 1
 
         return mask.bool()
