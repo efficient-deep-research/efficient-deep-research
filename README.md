@@ -66,9 +66,9 @@ python format_preference_data.py \
 You can run DPO training by executing `python train_DPO.py` with the appropriate arguments.
 This implementation is based on [SWIFT](https://github.com/modelscope/swift).
 
-We employ a custom trainer that subclasses SWIFT's `DPOTrainer`. This trainer specifically masks search results within the text to exclude them from the loss calculation.
+We use a custom trainer that subclasses SWIFT's `DPOTrainer`. This trainer specifically masks search results to exclude them from the loss calculation.
 
-Below is an example of how to run the training command, using arguments similar to those in SWIFT:
+Here is an example command using standard SWIFT arguments:
 
 ```bash
 python train_DPO.py \
