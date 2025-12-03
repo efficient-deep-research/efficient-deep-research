@@ -67,7 +67,7 @@ The training is based on [SWIFT](https://github.com/modelscope/swift).
 
 We use a custom trainer that subclasses SWIFT's `DPOTrainer`. This trainer specifically masks search results to exclude them from the loss calculation.
 
-You can run DPO training by executing `python train_DPO.py` with the follwing command:
+You can run DPO training with the follwing command:
 
 ```bash
 python train_DPO.py \
