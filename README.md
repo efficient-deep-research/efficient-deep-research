@@ -3,6 +3,8 @@
 This repository hosts a deep research system submitted to the MMU-RAG competition at NeurIPS 2025.
 The system is capable of generating report-style, long-form answers to arbitrary questions.
 
+## Dataset Generation
+
 ### Generate Answer Rollouts
 
 Generate multiple answer candidates for each question using the base model (`Qwen/Qwen3-Next-80B-A3B-Thinking-FP8`). This step creates 20 different responses per question.
